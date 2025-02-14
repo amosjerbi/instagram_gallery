@@ -1,7 +1,3 @@
 // Instagram API configuration
-const config = {
-    // Replace this with your Instagram Graph API token
-    instagramToken: 'Github_secrets',
-};
-
-export default config;
+const instagramToken = process.env.INSTAGRAM_ACCESS_TOKEN || 'INSTAGRAM_TOKEN_PLACEHOLDER';
+export { instagramToken };

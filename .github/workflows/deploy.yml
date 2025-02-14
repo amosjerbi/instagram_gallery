@@ -1,0 +1,30 @@
+name: Deploy Instagram Gallery
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Generate token.js
+        run: |
+          echo "const instagramToken = '${{ secrets.INSTAGRAM_TOKEN }}';" > js/token.js
+          echo "export { instagramToken };" >> js/token.js
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: .
