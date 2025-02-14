@@ -1,47 +1,32 @@
-name: Deploy static content to Pages
+name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ["development"]
+    branches: [ development ]
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
-  actions: write
 
 concurrency:
   group: "pages"
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  deploy:
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: development
-          
-      - name: List files
-        run: |
-          echo "Repository contents:"
-          ls -la
-          
+        
       - name: Setup Pages
         uses: actions/configure-pages@v4
         
-      - name: Build with Node.js
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "Files to be deployed:"
-          ls -R
-          
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -50,9 +35,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        
-      - name: Deployment status
-        if: always()
-        run: |
-          echo "Deployment Status: ${{ steps.deployment.outcome }}"
-          echo "Page URL: ${{ steps.deployment.outputs.page_url }}"
