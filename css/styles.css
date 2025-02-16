@@ -850,6 +850,75 @@ body {
 }
 
 .modallic {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+}
+
+.modallic-content {
+    position: relative;
+    margin: auto;
+    padding: 20px;
+    width: 90%;
+    max-width: 900px;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.modallic img {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+.modallic a {
+    color: white;
+    text-decoration: none;
+    margin-top: 20px;
+    padding: 10px 20px;
+    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.close {
+    position: absolute;
+    right: 25px;
+    top: 10px;
+    color: #f1f1f1;
+    font-size: 35px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1001;
+}
+
+.prev-btn, .next-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 16px;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.prev-btn { left: 20px; }
+.next-btn { right: 20px; }
+
+.prev-btn:hover, .next-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.modallic {
     display: none; /* Completely hide modal by default */
     position: fixed;
     z-index: 1000;
@@ -912,109 +981,6 @@ body {
     #modalImage {
         max-height: 60vh;
     }
-}
-
-.close {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    cursor: pointer;
-    width: 48px;
-    border-radius: 50%;
-    font-size: 28px;
-    cursor: pointer;
-    /* background-color: #214647; */
-    color: #5dbda6;
-    /* border: 3px solid #5dbd9d; */
-    padding: 8px 12px;
-    transition: 0.3s;
-}
-
-.nav-btn {
-    /* position: absolute; */
-    top: 50%;
-    /* transform: translateY(-50%); */
-    background-color: #5dbda6;
-    color: var(--primary_dark);
-    /* border: 2px solid var(--four_color); */
-    padding: 10px 6px;
-    cursor: pointer;
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 48px;
-    height: 48px;
-    transition: all 0.3s ease;
-    font-size: 26px;
-}
-
-.nav-btn i {
-    color: #fff;
-    font-size: 20px;
-}
-
-.prev-btn {
-    left: 20px;
-}
-
-.next-btn {
-    right: 20px;
-}
-
-.nav-btn:hover {
-    background-color: #a8b6f8;
-    color: var(--primary_dark);
-    /* transform: translateY(-50%) scale(1.1); */
-    border: none;
-}
-
-.nav-btn:active {
-    transform: translateY(-50%) scale(0.95);
-}
-
-/* Loading and error states */
-.loading, .error {
-    text-align: center;
-    padding: 20px;
-    color: #666;
-}
-
-.error {
-    color: #e1306c;
-}
-
-.modallic {
-    display: none; /* Completely hide modal by default */
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgb(0 4 1 / 90%);
-    align-items: center;
-    justify-content: center;
-}
-
-.modallic[style*="display: flex"] {
-    display: flex !important;
-}
-
-.modallic-content {
-    /* border: 1px solid #888; */
-    max-width: fit-content;
-    border-radius: 20px;
-    /* position: relative; */
-    /* flex-direction: row; */
-    background-color: #164546;
-    padding: 10px;
-    overflow: hidden;
-    display: flex;           /* Enables Flexbox */
-    justify-content: center; /* Centers horizontally */
-    align-items: center;     /* Centers vertically */
-    max-height: 100%;
 }
 
 .close:hover,

@@ -38,10 +38,10 @@ function showMorePosts() {
     
     postsToShow.forEach((post, index) => {
         const div = document.createElement('div');
-        div.className = 'flow';
+        div.className = 'gallery-item';
 
         const img = document.createElement('img');
-        img.className = 'img';
+        img.className = 'gallery-img';
         img.src = post.media_url;
         img.alt = post.caption || 'Instagram post';
         img.loading = 'lazy';
