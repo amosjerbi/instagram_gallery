@@ -120,7 +120,6 @@ function showMorePosts() {
             div.addEventListener('click', () => {
                 console.log(`Clicked post ${post.id} at index ${startIndex + index}`);
                 showPost(startIndex + index);
-                document.getElementById('modal').style.display = 'block';
             });
 
             div.appendChild(img);
@@ -135,37 +134,84 @@ function showMorePosts() {
 }
 
 function showPost(index) {
-    if (index >= 0 && index < posts.length) {
-        currentPostIndex = index;
-        const post = posts[index];
-        const modalImg = document.getElementById('modalImage');
-        const modalLink = document.getElementById('modalLink');
-        const prevBtn = document.querySelector('.prev-btn');
-        const nextBtn = document.querySelector('.next-btn');
-        
-        if (modalImg && modalLink) {
-            modalImg.src = post.media_url;
-            modalLink.href = post.permalink;
-            
-            // Update navigation buttons visibility
-            if (prevBtn) prevBtn.style.display = index === 0 ? 'none' : 'block';
-            if (nextBtn) nextBtn.style.display = index === posts.length - 1 ? 'none' : 'block';
-        }
+    currentPostIndex = index;
+    const post = posts[index];
+    const modal = document.getElementById('modal');
+    const modalImage = document.getElementById('modalImage');
+    const modalCaption = document.querySelector('.modal-caption');
+    const modalDate = document.querySelector('.modal-date');
+    const modalLink = document.querySelector('.modal-link');
+    const prevBtn = document.querySelector('.prev-btn');
+    const nextBtn = document.querySelector('.next-btn');
+
+    // Update navigation buttons
+    prevBtn.disabled = index === 0;
+    nextBtn.disabled = index === posts.length - 1;
+
+    // Update modal content
+    modalImage.src = post.permalink + 'media/?size=l';
+    modalImage.alt = post.caption || 'Instagram post';
+    modalCaption.textContent = post.caption || '';
+    modalDate.textContent = new Date(post.timestamp).toLocaleDateString();
+    modalLink.href = post.permalink;
+
+    // Show modal with animation
+    modal.style.display = 'block';
+    setTimeout(() => modal.classList.add('show'), 10);
+
+    // Update modal image error handling
+    modalImage.onerror = () => {
+        console.error('Modal image failed to load:', post.permalink);
+        modalImage.src = 'https://placehold.co/600x600?text=Image+Unavailable';
+    };
+}
+
+function hideModal() {
+    const modal = document.getElementById('modal');
+    modal.classList.remove('show');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function prevPost() {
+    if (currentPostIndex > 0) {
+        showPost(currentPostIndex - 1);
     }
 }
 
 function nextPost() {
-    console.log('Next post called, current index:', currentPostIndex);
     if (currentPostIndex < posts.length - 1) {
         showPost(currentPostIndex + 1);
     }
 }
 
-function prevPost() {
-    console.log('Previous post called, current index:', currentPostIndex);
-    if (currentPostIndex > 0) {
-        showPost(currentPostIndex - 1);
-    }
+function initModalControls() {
+    const modal = document.getElementById('modal');
+    const closeBtn = document.querySelector('.close');
+    const prevBtn = document.querySelector('.prev-btn');
+    const nextBtn = document.querySelector('.next-btn');
+
+    // Close button
+    closeBtn.onclick = hideModal;
+
+    // Click outside to close
+    modal.onclick = (event) => {
+        if (event.target === modal) {
+            hideModal();
+        }
+    };
+
+    // Navigation buttons
+    prevBtn.onclick = prevPost;
+    nextBtn.onclick = nextPost;
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (modal.style.display === 'block') {
+            if (e.key === 'ArrowLeft') prevPost();
+            if (e.key === 'ArrowRight') nextPost();
+            if (e.key === 'Escape') hideModal();
+        }
+    });
 }
 
 async function loadInstagramPosts() {
@@ -175,15 +221,7 @@ async function loadInstagramPosts() {
         console.error('Gallery element not found');
         return;
     }
-    console.log('Gallery element found:', gallery);
 
-    // Create a loading container
-    const loadingContainer = document.createElement('div');
-    loadingContainer.className = 'loading';
-    loadingContainer.textContent = 'Loading posts...';
-    gallery.appendChild(loadingContainer);
-    console.log('Added loading indicator');
-    
     try {
         console.log('Attempting to fetch Instagram posts...');
         const jsonPath = 'data/instagram.json';
@@ -227,6 +265,9 @@ async function loadInstagramPosts() {
         
         // Initialize infinite scroll
         initInfiniteScroll();
+        
+        // Initialize modal controls after posts are loaded
+        initModalControls();
         
         console.log('=== Finished loadInstagramPosts ===');
     } catch (error) {
