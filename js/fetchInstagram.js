@@ -40,24 +40,26 @@ function showMorePosts() {
         const div = document.createElement('div');
         div.className = 'gallery-item';
 
-        // Create the embed iframe
-        const iframe = document.createElement('iframe');
-        iframe.className = 'instagram-embed';
-        iframe.src = `https://www.instagram.com/p/${post.id}/embed`;
-        iframe.width = '100%';
-        iframe.height = '100%';
-        iframe.frameBorder = '0';
-        iframe.scrolling = 'no';
-        iframe.allowTransparency = true;
-
-        div.appendChild(iframe);
-
+        const img = document.createElement('img');
+        img.className = 'img';
+        img.src = post.media_url;
+        img.alt = post.caption || 'Instagram post';
+        img.loading = 'lazy';
+        
+        // Add error handling for images
+        img.onerror = () => {
+            console.error('Failed to load image:', post.media_url);
+            img.src = 'assets/images/placeholder.jpg'; // Add a placeholder image
+            div.classList.add('error');
+        };
+        
         // Add click event listener to show the modal
-        div.addEventListener('click', (e) => {
-            e.preventDefault();
-            showModal(post, index);
+        div.addEventListener('click', () => {
+            showPost(startIndex + index);
+            document.getElementById('modal').style.display = 'block';
         });
 
+        div.appendChild(img);
         document.getElementById('gallery').appendChild(div);
     });
     
@@ -70,76 +72,39 @@ function showMorePosts() {
             loadMoreBtn.style.display = 'block';
         }
     }
-    
-    // Add Instagram embed script
-    if (!document.getElementById('instagram-embed-script')) {
-        const script = document.createElement('script');
-        script.id = 'instagram-embed-script';
-        script.src = '//www.instagram.com/embed.js';
-        script.async = true;
-        script.defer = true;
-        document.body.appendChild(script);
-    }
 }
 
-function showModal(post, index) {
-    const modal = document.getElementById('modal');
-    const modalContent = modal.querySelector('.modallic-content');
-    
-    // Create embed iframe for modal
-    const iframe = document.createElement('iframe');
-    iframe.src = `https://www.instagram.com/p/${post.id}/embed/captioned`;
-    iframe.width = '100%';
-    iframe.height = '100%';
-    iframe.frameBorder = '0';
-    iframe.scrolling = 'no';
-    iframe.allowTransparency = true;
-    
-    // Clear previous content and add new iframe
-    modalContent.innerHTML = '';
-    modalContent.appendChild(iframe);
-    
-    // Show modal
-    modal.style.display = 'flex';
-    
-    // Update navigation buttons
-    const prevBtn = modal.querySelector('.prev-btn');
-    const nextBtn = modal.querySelector('.next-btn');
-    
-    prevBtn.style.display = index > 0 ? 'block' : 'none';
-    nextBtn.style.display = index < posts.length - 1 ? 'block' : 'none';
-    
-    prevBtn.onclick = () => {
-        if (index > 0) showModal(posts[index - 1], index - 1);
-    };
-    
-    nextBtn.onclick = () => {
-        if (index < posts.length - 1) showModal(posts[index + 1], index + 1);
-    };
-    
-    // Close button handler
-    const closeBtn = modal.querySelector('.close');
-    closeBtn.onclick = () => {
-        modal.style.display = 'none';
-    };
-    
-    // Close on outside click
-    modal.onclick = (e) => {
-        if (e.target === modal) modal.style.display = 'none';
-    };
+function showPost(index) {
+    if (index >= 0 && index < posts.length) {
+        currentPostIndex = index;
+        const post = posts[index];
+        const modalImg = document.getElementById('modalImage');
+        const modalLink = document.getElementById('modalLink');
+        const prevBtn = document.querySelector('.prev-btn');
+        const nextBtn = document.querySelector('.next-btn');
+        
+        if (modalImg && modalLink) {
+            modalImg.src = post.media_url;
+            modalLink.href = post.permalink;
+            
+            // Update navigation buttons visibility
+            if (prevBtn) prevBtn.style.display = index === 0 ? 'none' : 'block';
+            if (nextBtn) nextBtn.style.display = index === posts.length - 1 ? 'none' : 'block';
+        }
+    }
 }
 
 function nextPost() {
     console.log('Next post called, current index:', currentPostIndex);
     if (currentPostIndex < posts.length - 1) {
-        showModal(posts[currentPostIndex + 1], currentPostIndex + 1);
+        showPost(currentPostIndex + 1);
     }
 }
 
 function prevPost() {
     console.log('Previous post called, current index:', currentPostIndex);
     if (currentPostIndex > 0) {
-        showModal(posts[currentPostIndex - 1], currentPostIndex - 1);
+        showPost(currentPostIndex - 1);
     }
 }
 
@@ -158,7 +123,8 @@ async function loadInstagramPosts() {
     
     try {
         console.log('Fetching Instagram posts...');
-        const response = await fetch('data/instagram.json');
+        // Load the JSON file generated by the GitHub Actions workflow
+        const response = await fetch('assets/data/instagram-posts.json');
         if (!response.ok) {
             console.error('Failed to fetch posts:', response.status, response.statusText);
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -168,16 +134,19 @@ async function loadInstagramPosts() {
         console.log('Received data:', data);
         gallery.innerHTML = ''; // Only clear the gallery div
 
-        if (!data.data || !Array.isArray(data.data)) {
-            console.error('Invalid data format:', data);
-            throw new Error('Invalid data format');
+        if (!data.data || data.data.length === 0) {
+            console.error('No posts found in the response');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = 'No posts found';
+            gallery.appendChild(errorDiv);
+            return;
         }
 
         // Store posts globally and filter media types
-        posts = data.data.filter(post => {
-            console.log('Post media URL:', post.media_url);
-            return config.allowedMediaTypes.includes(post.media_type);
-        });
+        posts = data.data.filter(post =>
+            config.allowedMediaTypes.includes(post.media_type)
+        );
         console.log('Filtered posts:', posts.length);
 
         if (posts.length === 0) {
