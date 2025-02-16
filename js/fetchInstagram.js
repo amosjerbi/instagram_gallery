@@ -32,12 +32,17 @@ function initTouchGestures() {
 }
 
 function showMorePosts() {
+    console.log('=== Starting showMorePosts ===');
+    console.log('Current page:', currentPage);
     const startIndex = (currentPage - 1) * config.postsPerPage;
     const endIndex = startIndex + config.postsPerPage;
+    console.log(`Showing posts from index ${startIndex} to ${endIndex}`);
+    
     const postsToShow = posts.slice(startIndex, endIndex);
+    console.log('Posts to show:', postsToShow.length);
     
     postsToShow.forEach((post, index) => {
-        console.log('Creating element for post:', post);
+        console.log(`Creating element for post ${index + startIndex}:`, post.id);
         const div = document.createElement('div');
         div.className = 'gallery-item';
 
@@ -46,21 +51,26 @@ function showMorePosts() {
         
         // Use the Instagram permalink for the image
         const imageUrl = post.permalink + 'media/?size=l';
-        console.log('Setting image URL:', imageUrl);
+        console.log(`Post ${post.id} URL:`, imageUrl);
         img.src = imageUrl;
         img.alt = post.caption || 'Instagram post';
         img.loading = 'lazy';
         
         // Add error handling for images
         img.onerror = () => {
-            console.error('Failed to load image:', imageUrl);
+            console.error(`Image load error for post ${post.id}:`, imageUrl);
             console.error('Post data:', JSON.stringify(post, null, 2));
             img.src = 'https://placehold.co/600x600?text=Image+Unavailable';
             div.classList.add('error');
         };
+
+        img.onload = () => {
+            console.log(`Image loaded successfully for post ${post.id}`);
+        };
         
         // Add click event listener to show the modal
         div.addEventListener('click', () => {
+            console.log(`Clicked post ${post.id} at index ${startIndex + index}`);
             showPost(startIndex + index);
             document.getElementById('modal').style.display = 'block';
         });
@@ -72,12 +82,11 @@ function showMorePosts() {
     // Show/hide load more button
     const loadMoreBtn = document.getElementById('loadMoreBtn');
     if (loadMoreBtn) {
-        if (endIndex >= posts.length) {
-            loadMoreBtn.style.display = 'none';
-        } else {
-            loadMoreBtn.style.display = 'block';
-        }
+        const hasMore = endIndex < posts.length;
+        console.log('Has more posts:', hasMore);
+        loadMoreBtn.style.display = hasMore ? 'block' : 'none';
     }
+    console.log('=== Finished showMorePosts ===');
 }
 
 function showPost(index) {
@@ -115,31 +124,41 @@ function prevPost() {
 }
 
 async function loadInstagramPosts() {
+    console.log('=== Starting loadInstagramPosts ===');
     const gallery = document.getElementById('gallery');
     if (!gallery) {
         console.error('Gallery element not found');
         return;
     }
+    console.log('Gallery element found:', gallery);
 
     // Create a loading container
     const loadingContainer = document.createElement('div');
     loadingContainer.className = 'loading';
     loadingContainer.textContent = 'Loading posts...';
     gallery.appendChild(loadingContainer);
+    console.log('Added loading indicator');
     
     try {
-        console.log('Fetching Instagram posts...');
-        console.log('Attempting to fetch from:', window.location.href + 'data/instagram.json');
-        // Load the JSON file from the root path
-        const response = await fetch('/data/instagram.json');
-        console.log('Response status:', response.status);
+        console.log('Attempting to fetch Instagram posts...');
+        console.log('Current URL:', window.location.href);
+        const jsonPath = 'data/instagram.json';
+        console.log('Fetching JSON from:', jsonPath);
+        
+        const response = await fetch(jsonPath);
+        console.log('Fetch response:', {
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText
+        });
+
         if (!response.ok) {
             console.error('Failed to fetch posts:', response.status, response.statusText);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log('Received data structure:', JSON.stringify(data, null, 2));
+        console.log('Raw data structure:', JSON.stringify(data, null, 2));
         gallery.innerHTML = ''; // Only clear the gallery div
 
         if (!data.data || data.data.length === 0) {
@@ -151,14 +170,17 @@ async function loadInstagramPosts() {
             return;
         }
 
+        console.log('Total posts in data:', data.data.length);
+        console.log('Allowed media types:', config.allowedMediaTypes);
+
         // Store posts globally and filter media types
         posts = data.data.filter(post => {
-            console.log('Checking post:', post);
-            console.log('Media type:', post.media_type);
-            console.log('Allowed types:', config.allowedMediaTypes);
-            return config.allowedMediaTypes.includes(post.media_type);
+            const isAllowed = config.allowedMediaTypes.includes(post.media_type);
+            console.log(`Post ${post.id}: type=${post.media_type}, allowed=${isAllowed}`);
+            return isAllowed;
         });
-        console.log('Filtered posts:', posts.length);
+        
+        console.log('Filtered posts count:', posts.length);
 
         if (posts.length === 0) {
             console.error('No posts match the allowed media types:', config.allowedMediaTypes);
@@ -172,6 +194,7 @@ async function loadInstagramPosts() {
         // Add click event for load more
         const loadMoreBtn = document.getElementById('loadMoreBtn');
         if (loadMoreBtn) {
+            console.log('Setting up load more button');
             loadMoreBtn.addEventListener('click', () => {
                 currentPage++;
                 showMorePosts();
@@ -179,50 +202,15 @@ async function loadInstagramPosts() {
         }
 
         // Show initial posts
+        console.log('Showing initial posts...');
         showMorePosts();
-
-        // Initialize touch gestures
-        initTouchGestures();
-
-        // Add modal close functionality
-        const modal = document.getElementById('modal');
-        const closeBtn = document.querySelector('.close');
-        if (closeBtn) {
-            closeBtn.onclick = () => modal.style.display = 'none';
-        }
-        
-        // Add navigation button functionality
-        const prevBtn = document.querySelector('.prev-btn');
-        const nextBtn = document.querySelector('.next-btn');
-        
-        if (prevBtn) {
-            prevBtn.addEventListener('click', prevPost);
-        }
-        if (nextBtn) {
-            nextBtn.addEventListener('click', nextPost);
-        }
-        
-        // Add click outside modal to close
-        window.onclick = (event) => {
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        };
-
-        // Add keyboard navigation
-        document.addEventListener('keydown', (e) => {
-            if (modal.style.display === 'block') {
-                if (e.key === 'ArrowLeft') prevPost();
-                if (e.key === 'ArrowRight') nextPost();
-                if (e.key === 'Escape') modal.style.display = 'none';
-            }
-        });
-
+        console.log('=== Finished loadInstagramPosts ===');
     } catch (error) {
-        console.error('Error loading posts:', error);
+        console.error('Error in loadInstagramPosts:', error);
+        gallery.innerHTML = '';
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error';
-        errorDiv.textContent = 'Error loading posts. Please try again later.';
+        errorDiv.textContent = 'Error loading posts: ' + error.message;
         gallery.appendChild(errorDiv);
     }
 }
