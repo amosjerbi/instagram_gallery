@@ -42,21 +42,24 @@ function showMorePosts() {
 
         const img = document.createElement('img');
         img.className = 'gallery-img';
-        // Convert relative path to absolute URL if needed
-        const imageUrl = post.media_url.startsWith('http') 
-            ? post.media_url 
-            : post.media_url.startsWith('/') 
-                ? post.media_url.slice(1) // Remove leading slash
-                : post.media_url;
-        img.src = imageUrl;
+        
+        // Only use URLs that are direct Instagram CDN links
+        if (!post.media_url.includes('instagram.com')) {
+            console.warn('Skipping post due to invalid media URL:', post.id);
+            return;
+        }
+
+        img.src = post.media_url;
         img.alt = post.caption || 'Instagram post';
         img.loading = 'lazy';
         
-        // Add error handling for images
+        // Add error handler for images
         img.onerror = () => {
-            console.error('Failed to load image:', imageUrl);
-            img.src = 'imgs/placeholder.png'; // Fallback image
+            console.error('Failed to load image:', post.media_url);
+            div.style.display = 'none'; // Hide failed items
         };
+
+        div.appendChild(img);
         
         // Add click event listener to show the modal
         div.addEventListener('click', () => {
@@ -64,7 +67,6 @@ function showMorePosts() {
             document.getElementById('modal').style.display = 'block';
         });
 
-        div.appendChild(img);
         document.getElementById('gallery').appendChild(div);
     });
     
