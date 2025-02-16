@@ -121,38 +121,40 @@ function initModalControls() {
     const modal = document.getElementById('modal');
     const closeBtn = document.querySelector('.close');
     
-    // Close button
-    if (closeBtn) {
-        closeBtn.onclick = () => {
-            modal.classList.remove('show');
-        };
-    }
-    
-    // Click outside to close
-    window.onclick = (event) => {
-        if (event.target === modal) {
-            modal.classList.remove('show');
+    if (modal) {
+        // Close button
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                modal.classList.remove('show');
+            };
         }
-    };
-    
-    // Keyboard navigation
-    document.addEventListener('keydown', (e) => {
-        if (modal.classList.contains('show')) {
-            if (e.key === 'ArrowLeft') {
-                const prevBtn = document.querySelector('.prev-btn');
-                if (prevBtn && prevBtn.style.visibility !== 'hidden') {
-                    showPost(currentPostIndex - 1);
-                }
-            } else if (e.key === 'ArrowRight') {
-                const nextBtn = document.querySelector('.next-btn');
-                if (nextBtn && nextBtn.style.visibility !== 'hidden') {
-                    showPost(currentPostIndex + 1);
-                }
-            } else if (e.key === 'Escape') {
+        
+        // Click outside to close
+        window.onclick = (event) => {
+            if (event.target === modal) {
                 modal.classList.remove('show');
             }
-        }
-    });
+        };
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (modal.classList.contains('show')) {
+                if (e.key === 'ArrowLeft') {
+                    const prevBtn = document.querySelector('.prev-btn');
+                    if (prevBtn && prevBtn.style.visibility !== 'hidden') {
+                        showPost(currentPostIndex - 1);
+                    }
+                } else if (e.key === 'ArrowRight') {
+                    const nextBtn = document.querySelector('.next-btn');
+                    if (nextBtn && nextBtn.style.visibility !== 'hidden') {
+                        showPost(currentPostIndex + 1);
+                    }
+                } else if (e.key === 'Escape') {
+                    modal.classList.remove('show');
+                }
+            }
+        });
+    }
 }
 
 function initTouchGestures() {
