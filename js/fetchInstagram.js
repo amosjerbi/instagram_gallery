@@ -1,75 +1,65 @@
-import config from './config.js';
+import config, { getInstagramData } from './config.js';
 
-let posts = []; // Global variable to store posts
+let posts = []; 
 let currentPostIndex = 0;
-let currentPage = 1;
+let isLoading = false;
+let hasMore = true;
 
-function initTouchGestures() {
-    const modalContent = document.querySelector('.modallic-content');
-    if (!modalContent || !window.Hammer) {
-        console.error('Modal content or Hammer.js not found');
-        return;
+async function fetchInstagramPosts() {
+    try {
+        const data = await getInstagramData();
+        if (!data || data.length === 0) {
+            throw new Error('No posts found');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error fetching Instagram posts:', error);
+        throw error;
     }
-
-    const hammer = new Hammer(modalContent);
-    
-    // Configure horizontal swipe
-    hammer.get('swipe').set({ 
-        direction: Hammer.DIRECTION_HORIZONTAL,
-        threshold: 5,
-        velocity: 0.1
-    });
-    
-    hammer.on('swipeleft', () => {
-        console.log('Swipe left detected');
-        nextPost();
-    });
-    
-    hammer.on('swiperight', () => {
-        console.log('Swipe right detected');
-        prevPost();
-    });
 }
 
-function showMorePosts() {
-    const startIndex = (currentPage - 1) * config.postsPerPage;
-    const endIndex = startIndex + config.postsPerPage;
-    const postsToShow = posts.slice(startIndex, endIndex);
-    
-    postsToShow.forEach((post, index) => {
-        const div = document.createElement('div');
-        div.className = 'flow';
+async function showMorePosts() {
+    if (isLoading || !hasMore) return;
+    isLoading = true;
 
-        const img = document.createElement('img');
-        img.className = 'img';
-        img.src = post.media_url;
-        img.alt = post.caption || 'Instagram post';
-        img.loading = 'lazy';
-        
-        // Add error handling for images
-        img.onerror = () => {
-            console.error('Failed to load image:', post.media_url);
-            img.src = 'assets/images/placeholder.jpg'; // Add a placeholder image
-            div.classList.add('error');
-        };
-        
-        // Add click event listener to show the modal
-        div.addEventListener('click', () => {
-            showPost(startIndex + index);
-            document.getElementById('modal').style.display = 'block';
-        });
-
-        div.appendChild(img);
-        document.getElementById('gallery').appendChild(div);
-    });
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
     
-    // Show/hide load more button
-    const loadMoreBtn = document.getElementById('loadMoreBtn');
-    if (loadMoreBtn) {
-        if (endIndex >= posts.length) {
-            loadMoreBtn.style.display = 'none';
-        } else {
-            loadMoreBtn.style.display = 'block';
+    const spinner = document.createElement('div');
+    spinner.className = 'loading-spinner';
+    
+    const text = document.createElement('span');
+    text.textContent = 'Loading posts...';
+    
+    loadingIndicator.appendChild(spinner);
+    loadingIndicator.appendChild(text);
+    document.getElementById('gallery').appendChild(loadingIndicator);
+
+    try {
+        if (posts.length === 0) {
+            // Initial load
+            const newPosts = await fetchInstagramPosts();
+            if (newPosts && newPosts.length > 0) {
+                posts = posts.concat(newPosts);
+                displayPosts(posts);
+            }
+        }
+        
+        isLoading = false;
+        hasMore = false; // Since we load all posts at once now
+        
+    } catch (error) {
+        console.error('Error loading posts:', error);
+        const gallery = document.getElementById('gallery');
+        if (gallery) {
+            gallery.innerHTML = '<div class="error">Error loading posts. Please try again later.</div>';
+        }
+        isLoading = false;
+        hasMore = false;
+    } finally {
+        const indicator = document.querySelector('.loading-indicator');
+        if (indicator) {
+            indicator.remove();
         }
     }
 }
@@ -84,27 +74,86 @@ function showPost(index) {
         const nextBtn = document.querySelector('.next-btn');
         
         if (modalImg && modalLink) {
-            modalImg.src = post.media_url;
+            // Preload image
+            const img = new Image();
+            img.onload = function() {
+                modalImg.src = post.media_url;
+            };
+            img.src = post.media_url;
+            
             modalLink.href = post.permalink;
             
-            // Update navigation buttons visibility
-            if (prevBtn) prevBtn.style.display = index === 0 ? 'none' : 'block';
-            if (nextBtn) nextBtn.style.display = index === posts.length - 1 ? 'none' : 'block';
+            // Update navigation buttons
+            if (prevBtn) {
+                prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
+                prevBtn.onclick = () => showPost(index - 1);
+            }
+            if (nextBtn) {
+                nextBtn.style.visibility = index === posts.length - 1 ? 'hidden' : 'visible';
+                nextBtn.onclick = () => showPost(index + 1);
+            }
         }
     }
 }
 
-function nextPost() {
-    console.log('Next post called, current index:', currentPostIndex);
-    if (currentPostIndex < posts.length - 1) {
-        showPost(currentPostIndex + 1);
+function initModalControls() {
+    const modal = document.getElementById('modal');
+    const closeBtn = document.querySelector('.close');
+    
+    // Close button
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            modal.classList.remove('show');
+        };
     }
+    
+    // Click outside to close
+    window.onclick = (event) => {
+        if (event.target === modal) {
+            modal.classList.remove('show');
+        }
+    };
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (modal.classList.contains('show')) {
+            if (e.key === 'ArrowLeft') {
+                const prevBtn = document.querySelector('.prev-btn');
+                if (prevBtn && prevBtn.style.visibility !== 'hidden') {
+                    showPost(currentPostIndex - 1);
+                }
+            } else if (e.key === 'ArrowRight') {
+                const nextBtn = document.querySelector('.next-btn');
+                if (nextBtn && nextBtn.style.visibility !== 'hidden') {
+                    showPost(currentPostIndex + 1);
+                }
+            } else if (e.key === 'Escape') {
+                modal.classList.remove('show');
+            }
+        }
+    });
 }
 
-function prevPost() {
-    console.log('Previous post called, current index:', currentPostIndex);
-    if (currentPostIndex > 0) {
-        showPost(currentPostIndex - 1);
+function initTouchGestures() {
+    try {
+        const modalContent = document.querySelector('.modallic-content');
+        if (!modalContent || !Hammer) {
+            console.warn('Modal content or Hammer.js not initialized yet');
+            return;
+        }
+
+        const hammer = new Hammer(modalContent);
+        hammer.on('swipeleft', () => {
+            const nextBtn = document.querySelector('.next-btn');
+            if (nextBtn && !nextBtn.disabled) nextBtn.click();
+        });
+        
+        hammer.on('swiperight', () => {
+            const prevBtn = document.querySelector('.prev-btn');
+            if (prevBtn && !prevBtn.disabled) prevBtn.click();
+        });
+    } catch (error) {
+        console.warn('Error initializing touch gestures:', error);
     }
 }
 
@@ -115,100 +164,37 @@ async function loadInstagramPosts() {
         return;
     }
 
-    // Create a loading container
-    const loadingContainer = document.createElement('div');
-    loadingContainer.className = 'loading';
-    loadingContainer.textContent = 'Loading posts...';
-    gallery.appendChild(loadingContainer);
+    // Reset state
+    posts = [];
+    currentPostIndex = 0;
+    isLoading = false;
+    hasMore = true;
+    
+    gallery.innerHTML = '';
     
     try {
-        console.log('Fetching Instagram posts...');
-        // Load the JSON file generated by the GitHub Actions workflow
-        const response = await fetch('assets/data/instagram-posts.json');
-        if (!response.ok) {
-            console.error('Failed to fetch posts:', response.status, response.statusText);
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log('Received data:', data);
-        gallery.innerHTML = ''; // Only clear the gallery div
-
-        if (!data.data || data.data.length === 0) {
-            console.error('No posts found in the response');
+        await showMorePosts();
+        
+        if (posts.length === 0) {
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error';
             errorDiv.textContent = 'No posts found';
             gallery.appendChild(errorDiv);
             return;
         }
-
-        // Store posts globally and filter media types
-        posts = data.data.filter(post =>
-            config.allowedMediaTypes.includes(post.media_type)
-        );
-        console.log('Filtered posts:', posts.length);
-
-        if (posts.length === 0) {
-            console.error('No posts match the allowed media types:', config.allowedMediaTypes);
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error';
-            errorDiv.textContent = 'No compatible posts found';
-            gallery.appendChild(errorDiv);
-            return;
-        }
-
-        // Add click event for load more
-        const loadMoreBtn = document.getElementById('loadMoreBtn');
-        if (loadMoreBtn) {
-            loadMoreBtn.addEventListener('click', () => {
-                currentPage++;
-                showMorePosts();
-            });
-        }
-
-        // Show initial posts
-        showMorePosts();
-
-        // Initialize touch gestures
-        initTouchGestures();
-
-        // Add modal close functionality
-        const modal = document.getElementById('modal');
-        const closeBtn = document.querySelector('.close');
-        if (closeBtn) {
-            closeBtn.onclick = () => modal.style.display = 'none';
-        }
         
-        // Add navigation button functionality
-        const prevBtn = document.querySelector('.prev-btn');
-        const nextBtn = document.querySelector('.next-btn');
+        // Initialize modal controls
+        initModalControls();
         
-        if (prevBtn) {
-            prevBtn.addEventListener('click', prevPost);
-        }
-        if (nextBtn) {
-            nextBtn.addEventListener('click', nextPost);
-        }
+        // Create sentinel for infinite scrolling
+        createSentinel();
         
-        // Add click outside modal to close
-        window.onclick = (event) => {
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        };
-
-        // Add keyboard navigation
-        document.addEventListener('keydown', (e) => {
-            if (modal.style.display === 'block') {
-                if (e.key === 'ArrowLeft') prevPost();
-                if (e.key === 'ArrowRight') nextPost();
-                if (e.key === 'Escape') modal.style.display = 'none';
-            }
-        });
-
+        // Initialize touch gestures after a short delay
+        setTimeout(initTouchGestures, 1000);
+        
     } catch (error) {
         console.error('Error loading posts:', error);
+        gallery.innerHTML = '';
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error';
         errorDiv.textContent = 'Error loading posts. Please try again later.';
@@ -216,5 +202,70 @@ async function loadInstagramPosts() {
     }
 }
 
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', loadInstagramPosts);
+// Intersection Observer for infinite scrolling
+const observerOptions = {
+    root: null,
+    rootMargin: '100px',
+    threshold: 0.1
+};
+
+const intersectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && !isLoading && hasMore) {
+            console.log('Loading more posts...');
+            showMorePosts();
+        }
+    });
+}, observerOptions);
+
+// Create and observe sentinel element
+function createSentinel() {
+    // Remove existing sentinel
+    const existingSentinel = document.querySelector('.sentinel');
+    if (existingSentinel) {
+        existingSentinel.remove();
+    }
+    
+    const sentinel = document.createElement('div');
+    sentinel.className = 'sentinel';
+    sentinel.style.height = '1px';
+    sentinel.style.width = '100%';
+    document.getElementById('gallery').appendChild(sentinel);
+    intersectionObserver.observe(sentinel);
+}
+
+function displayPosts(posts) {
+    const gallery = document.getElementById('gallery');
+    if (!gallery) return;
+    
+    gallery.innerHTML = ''; // Clear existing content
+    
+    if (!posts || posts.length === 0) {
+        gallery.innerHTML = '<div class="error">No posts found</div>';
+        return;
+    }
+    
+    posts.forEach((post, index) => {
+        if (!post.media_url) return; // Skip posts without media
+        
+        const div = document.createElement('div');
+        div.className = 'gallery-item';
+        
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.src = post.media_url;
+        img.alt = post.caption || 'Instagram post';
+        
+        div.addEventListener('click', () => {
+            showPost(index);
+            const modal = document.getElementById('modal');
+            modal.classList.add('show');
+        });
+        
+        div.appendChild(img);
+        gallery.appendChild(div);
+    });
+}
+
+// Initialize
+loadInstagramPosts();
