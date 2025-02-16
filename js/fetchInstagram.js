@@ -1,101 +1,75 @@
-import config, { getInstagramData } from './config.js';
+import config from './config.js';
 
-let currentPage = 0;
-let posts = []; 
+let posts = []; // Global variable to store posts
 let currentPostIndex = 0;
-let isLoading = false;
-let hasMore = true;
+let currentPage = 1;
 
-async function fetchInstagramPosts() {
-    try {
-        console.log('Fetching Instagram posts...');
-        const data = await getInstagramData();
-        console.log('Raw data:', data);
-        
-        if (!data) {
-            console.error('No data received from getInstagramData');
-            throw new Error('No data received');
-        }
-        
-        // Handle both array and object with data property
-        const posts = Array.isArray(data) ? data : data.data;
-        
-        if (!Array.isArray(posts)) {
-            console.error('Data is not in expected format:', data);
-            throw new Error('Invalid data format');
-        }
-        
-        console.log('Fetched data:', posts ? `${posts.length} posts` : 'No posts');
-        if (!posts || posts.length === 0) {
-            throw new Error('No posts found');
-        }
-        return posts;
-    } catch (error) {
-        console.error('Error fetching Instagram posts:', error);
-        throw error;
-    }
-}
-
-async function showMorePosts() {
-    if (isLoading || !hasMore) {
-        console.log('Skipping showMorePosts - isLoading:', isLoading, 'hasMore:', hasMore);
+function initTouchGestures() {
+    const modalContent = document.querySelector('.modallic-content');
+    if (!modalContent || !window.Hammer) {
+        console.error('Modal content or Hammer.js not found');
         return;
     }
-    isLoading = true;
-    console.log('Loading more posts...');
 
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.className = 'loading-indicator';
+    const hammer = new Hammer(modalContent);
     
-    const spinner = document.createElement('div');
-    spinner.className = 'loading-spinner';
+    // Configure horizontal swipe
+    hammer.get('swipe').set({ 
+        direction: Hammer.DIRECTION_HORIZONTAL,
+        threshold: 5,
+        velocity: 0.1
+    });
     
-    const text = document.createElement('span');
-    text.textContent = 'Loading posts...';
+    hammer.on('swipeleft', () => {
+        console.log('Swipe left detected');
+        nextPost();
+    });
     
-    loadingIndicator.appendChild(spinner);
-    loadingIndicator.appendChild(text);
-    document.getElementById('gallery').appendChild(loadingIndicator);
+    hammer.on('swiperight', () => {
+        console.log('Swipe right detected');
+        prevPost();
+    });
+}
 
-    try {
-        if (posts.length === 0) {
-            // Initial load
-            console.log('Initial load - fetching all posts');
-            const allPosts = await fetchInstagramPosts();
-            if (allPosts && allPosts.length > 0) {
-                posts = allPosts;
-                console.log('Successfully loaded', posts.length, 'posts');
-            }
-        }
+function showMorePosts() {
+    const startIndex = (currentPage - 1) * config.postsPerPage;
+    const endIndex = startIndex + config.postsPerPage;
+    const postsToShow = posts.slice(startIndex, endIndex);
+    
+    postsToShow.forEach((post, index) => {
+        const div = document.createElement('div');
+        div.className = 'flow';
 
-        const startIndex = currentPage * config.postsPerPage;
-        const endIndex = startIndex + config.postsPerPage;
-        console.log('Displaying posts from index', startIndex, 'to', endIndex);
-        const postsToDisplay = posts.slice(startIndex, endIndex);
+        const img = document.createElement('img');
+        img.className = 'img';
+        img.src = post.media_url;
+        img.alt = post.caption || 'Instagram post';
+        img.loading = 'lazy';
         
-        if (postsToDisplay.length > 0) {
-            console.log('Displaying batch of', postsToDisplay.length, 'posts');
-            displayPostsBatch(postsToDisplay);
-            currentPage++;
-            hasMore = endIndex < posts.length;
-            console.log('Updated state - currentPage:', currentPage, 'hasMore:', hasMore);
+        // Add error handling for images
+        img.onerror = () => {
+            console.error('Failed to load image:', post.media_url);
+            img.src = 'assets/images/placeholder.jpg'; // Add a placeholder image
+            div.classList.add('error');
+        };
+        
+        // Add click event listener to show the modal
+        div.addEventListener('click', () => {
+            showPost(startIndex + index);
+            document.getElementById('modal').style.display = 'block';
+        });
+
+        div.appendChild(img);
+        document.getElementById('gallery').appendChild(div);
+    });
+    
+    // Show/hide load more button
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    if (loadMoreBtn) {
+        if (endIndex >= posts.length) {
+            loadMoreBtn.style.display = 'none';
         } else {
-            console.log('No more posts to display');
-            hasMore = false;
-        }
-        
-    } catch (error) {
-        console.error('Error loading posts:', error);
-        const gallery = document.getElementById('gallery');
-        if (gallery) {
-            gallery.innerHTML = '<div class="error">Error loading posts. Please try again later.</div>';
-        }
-        hasMore = false;
-    } finally {
-        isLoading = false;
-        const indicator = document.querySelector('.loading-indicator');
-        if (indicator) {
-            indicator.remove();
+            loadMoreBtn.style.display = 'block';
         }
     }
 }
@@ -110,179 +84,131 @@ function showPost(index) {
         const nextBtn = document.querySelector('.next-btn');
         
         if (modalImg && modalLink) {
-            // Preload image
-            const img = new Image();
-            img.onload = function() {
-                modalImg.src = post.media_url;
-            };
-            img.src = post.media_url;
-            
+            modalImg.src = post.media_url;
             modalLink.href = post.permalink;
             
-            // Update navigation buttons
-            if (prevBtn) {
-                prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
-                prevBtn.onclick = () => showPost(index - 1);
-            }
-            if (nextBtn) {
-                nextBtn.style.visibility = index === posts.length - 1 ? 'hidden' : 'visible';
-                nextBtn.onclick = () => showPost(index + 1);
-            }
+            // Update navigation buttons visibility
+            if (prevBtn) prevBtn.style.display = index === 0 ? 'none' : 'block';
+            if (nextBtn) nextBtn.style.display = index === posts.length - 1 ? 'none' : 'block';
         }
     }
 }
 
-function initModalControls() {
-    const modal = document.getElementById('modal');
-    const closeBtn = document.querySelector('.close');
+function nextPost() {
+    console.log('Next post called, current index:', currentPostIndex);
+    if (currentPostIndex < posts.length - 1) {
+        showPost(currentPostIndex + 1);
+    }
+}
+
+function prevPost() {
+    console.log('Previous post called, current index:', currentPostIndex);
+    if (currentPostIndex > 0) {
+        showPost(currentPostIndex - 1);
+    }
+}
+
+async function loadInstagramPosts() {
+    const gallery = document.getElementById('gallery');
+    if (!gallery) {
+        console.error('Gallery element not found');
+        return;
+    }
+
+    // Create a loading container
+    const loadingContainer = document.createElement('div');
+    loadingContainer.className = 'loading';
+    loadingContainer.textContent = 'Loading posts...';
+    gallery.appendChild(loadingContainer);
     
-    if (modal) {
-        // Close button
+    try {
+        console.log('Fetching Instagram posts...');
+        // Load the JSON file generated by the GitHub Actions workflow
+        const response = await fetch('assets/data/instagram-posts.json');
+        if (!response.ok) {
+            console.error('Failed to fetch posts:', response.status, response.statusText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Received data:', data);
+        gallery.innerHTML = ''; // Only clear the gallery div
+
+        if (!data.data || data.data.length === 0) {
+            console.error('No posts found in the response');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = 'No posts found';
+            gallery.appendChild(errorDiv);
+            return;
+        }
+
+        // Store posts globally and filter media types
+        posts = data.data.filter(post =>
+            config.allowedMediaTypes.includes(post.media_type)
+        );
+        console.log('Filtered posts:', posts.length);
+
+        if (posts.length === 0) {
+            console.error('No posts match the allowed media types:', config.allowedMediaTypes);
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = 'No compatible posts found';
+            gallery.appendChild(errorDiv);
+            return;
+        }
+
+        // Add click event for load more
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => {
+                currentPage++;
+                showMorePosts();
+            });
+        }
+
+        // Show initial posts
+        showMorePosts();
+
+        // Initialize touch gestures
+        initTouchGestures();
+
+        // Add modal close functionality
+        const modal = document.getElementById('modal');
+        const closeBtn = document.querySelector('.close');
         if (closeBtn) {
-            closeBtn.onclick = () => {
-                modal.classList.remove('show');
-            };
+            closeBtn.onclick = () => modal.style.display = 'none';
         }
         
-        // Click outside to close
+        // Add navigation button functionality
+        const prevBtn = document.querySelector('.prev-btn');
+        const nextBtn = document.querySelector('.next-btn');
+        
+        if (prevBtn) {
+            prevBtn.addEventListener('click', prevPost);
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', nextPost);
+        }
+        
+        // Add click outside modal to close
         window.onclick = (event) => {
             if (event.target === modal) {
-                modal.classList.remove('show');
+                modal.style.display = 'none';
             }
         };
-        
-        // Keyboard navigation
+
+        // Add keyboard navigation
         document.addEventListener('keydown', (e) => {
-            if (modal.classList.contains('show')) {
-                if (e.key === 'ArrowLeft') {
-                    const prevBtn = document.querySelector('.prev-btn');
-                    if (prevBtn && prevBtn.style.visibility !== 'hidden') {
-                        showPost(currentPostIndex - 1);
-                    }
-                } else if (e.key === 'ArrowRight') {
-                    const nextBtn = document.querySelector('.next-btn');
-                    if (nextBtn && nextBtn.style.visibility !== 'hidden') {
-                        showPost(currentPostIndex + 1);
-                    }
-                } else if (e.key === 'Escape') {
-                    modal.classList.remove('show');
-                }
+            if (modal.style.display === 'block') {
+                if (e.key === 'ArrowLeft') prevPost();
+                if (e.key === 'ArrowRight') nextPost();
+                if (e.key === 'Escape') modal.style.display = 'none';
             }
         });
-    }
-}
 
-function initTouchGestures() {
-    try {
-        const modalContent = document.querySelector('.modallic-content');
-        if (!modalContent || !Hammer) {
-            console.warn('Modal content or Hammer.js not initialized yet');
-            return;
-        }
-
-        const hammer = new Hammer(modalContent);
-        hammer.on('swipeleft', () => {
-            const nextBtn = document.querySelector('.next-btn');
-            if (nextBtn && !nextBtn.disabled) nextBtn.click();
-        });
-        
-        hammer.on('swiperight', () => {
-            const prevBtn = document.querySelector('.prev-btn');
-            if (prevBtn && !prevBtn.disabled) prevBtn.click();
-        });
-    } catch (error) {
-        console.warn('Error initializing touch gestures:', error);
-    }
-}
-
-function displayPostsBatch(newPosts) {
-    console.log('Displaying batch of posts:', newPosts.length);
-    const gallery = document.getElementById('gallery');
-    if (!gallery) {
-        console.error('Gallery element not found');
-        return;
-    }
-    
-    if (!newPosts || newPosts.length === 0) {
-        console.log('No posts to display in this batch');
-        if (posts.length === 0) {
-            gallery.innerHTML = '<div class="error">No posts found</div>';
-        }
-        return;
-    }
-    
-    // Remove existing sentinel before adding new posts
-    const existingSentinel = document.querySelector('.sentinel');
-    if (existingSentinel) {
-        existingSentinel.remove();
-    }
-    
-    newPosts.forEach((post, index) => {
-        if (!post.media_url) {
-            console.log('Skipping post', index, '- no media_url');
-            return;
-        }
-        
-        const div = document.createElement('div');
-        div.className = 'gallery-item';
-        
-        const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.src = post.media_url;
-        img.alt = post.caption || 'Instagram post';
-        
-        div.addEventListener('click', () => {
-            const absoluteIndex = (currentPage - 1) * config.postsPerPage + index;
-            showPost(absoluteIndex);
-            const modal = document.getElementById('modal');
-            modal.classList.add('show');
-        });
-        
-        div.appendChild(img);
-        gallery.appendChild(div);
-    });
-    
-    // Create new sentinel after adding posts
-    if (hasMore) {
-        createSentinel();
-        console.log('Created new sentinel because hasMore is true');
-    } else {
-        console.log('No sentinel created because hasMore is false');
-    }
-    console.log('Finished displaying batch of posts');
-}
-
-function loadInstagramPosts() {
-    const gallery = document.getElementById('gallery');
-    if (!gallery) {
-        console.error('Gallery element not found');
-        return;
-    }
-
-    // Reset state
-    posts = [];
-    currentPage = 0;
-    currentPostIndex = 0;
-    isLoading = false;
-    hasMore = true;
-    
-    gallery.innerHTML = '';
-    
-    try {
-        showMorePosts();
-        
-        // Initialize modal controls
-        initModalControls();
-        
-        // Create sentinel for infinite scrolling
-        createSentinel();
-        
-        // Initialize touch gestures after a short delay
-        setTimeout(initTouchGestures, 1000);
-        
     } catch (error) {
         console.error('Error loading posts:', error);
-        gallery.innerHTML = '';
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error';
         errorDiv.textContent = 'Error loading posts. Please try again later.';
@@ -290,41 +216,5 @@ function loadInstagramPosts() {
     }
 }
 
-// Intersection Observer for infinite scrolling
-const observerOptions = {
-    root: null,
-    rootMargin: '200px', // Increased margin to trigger earlier
-    threshold: 0.1
-};
-
-const intersectionObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting && !isLoading && hasMore) {
-            console.log('Sentinel is visible, loading more posts...');
-            showMorePosts();
-        }
-    });
-}, observerOptions);
-
-// Create and observe sentinel element
-function createSentinel() {
-    // Remove existing sentinel if it exists
-    const existingSentinel = document.querySelector('.sentinel');
-    if (existingSentinel) {
-        existingSentinel.remove();
-    }
-    
-    const sentinel = document.createElement('div');
-    sentinel.className = 'sentinel';
-    sentinel.style.height = '50px';  // Made taller for better detection
-    sentinel.style.width = '100%';
-    sentinel.style.marginTop = '20px';
-    sentinel.style.marginBottom = '20px';
-    document.getElementById('gallery').appendChild(sentinel);
-    
-    console.log('Created new sentinel element');
-    intersectionObserver.observe(sentinel);
-}
-
-// Initialize
-loadInstagramPosts();
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', loadInstagramPosts);
