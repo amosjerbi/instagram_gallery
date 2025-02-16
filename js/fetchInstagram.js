@@ -69,17 +69,15 @@ async function showMorePosts() {
             hasMore = false;
         }
         
-        isLoading = false;
-        
     } catch (error) {
         console.error('Error loading posts:', error);
         const gallery = document.getElementById('gallery');
         if (gallery) {
             gallery.innerHTML = '<div class="error">Error loading posts. Please try again later.</div>';
         }
-        isLoading = false;
         hasMore = false;
     } finally {
+        isLoading = false;
         const indicator = document.querySelector('.loading-indicator');
         if (indicator) {
             indicator.remove();
@@ -217,7 +215,8 @@ function displayPostsBatch(newPosts) {
         img.alt = post.caption || 'Instagram post';
         
         div.addEventListener('click', () => {
-            showPost(index + (currentPage - 1) * config.postsPerPage);
+            const absoluteIndex = (currentPage - 1) * config.postsPerPage + index;
+            showPost(absoluteIndex);
             const modal = document.getElementById('modal');
             modal.classList.add('show');
         });
@@ -227,7 +226,12 @@ function displayPostsBatch(newPosts) {
     });
     
     // Create new sentinel after adding posts
-    createSentinel();
+    if (hasMore) {
+        createSentinel();
+        console.log('Created new sentinel because hasMore is true');
+    } else {
+        console.log('No sentinel created because hasMore is false');
+    }
     console.log('Finished displaying batch of posts');
 }
 
@@ -272,7 +276,7 @@ function loadInstagramPosts() {
 // Intersection Observer for infinite scrolling
 const observerOptions = {
     root: null,
-    rootMargin: '100px',
+    rootMargin: '200px', // Increased margin to trigger earlier
     threshold: 0.1
 };
 
@@ -295,9 +299,10 @@ function createSentinel() {
     
     const sentinel = document.createElement('div');
     sentinel.className = 'sentinel';
-    sentinel.style.height = '20px';  // Make it a bit taller
+    sentinel.style.height = '50px';  // Made taller for better detection
     sentinel.style.width = '100%';
-    sentinel.style.marginTop = '20px';  // Add some margin
+    sentinel.style.marginTop = '20px';
+    sentinel.style.marginBottom = '20px';
     document.getElementById('gallery').appendChild(sentinel);
     
     console.log('Created new sentinel element');
