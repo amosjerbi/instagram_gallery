@@ -1,4 +1,5 @@
 import config from './config.js';
+import MediaCache from './cache.js';
 
 let posts = []; // Global variable to store posts
 let currentPostIndex = 0;
@@ -100,7 +101,16 @@ function showMorePosts() {
             const img = document.createElement('img');
             img.className = 'img';
             
-            const imageUrl = post.permalink + 'media/?size=l';
+            // Try to get image URL from cache first
+            let imageUrl = MediaCache.get(post.id);
+            if (!imageUrl) {
+                imageUrl = post.permalink + 'media/?size=l';
+                // Cache the URL if loading is successful
+                img.addEventListener('load', () => {
+                    MediaCache.set(post.id, imageUrl);
+                });
+            }
+            
             console.log(`Post ${post.id} URL:`, imageUrl);
             img.src = imageUrl;
             img.alt = post.caption || 'Instagram post';
@@ -109,12 +119,15 @@ function showMorePosts() {
             img.onerror = () => {
                 console.error(`Image load error for post ${post.id}:`, imageUrl);
                 console.error('Post data:', JSON.stringify(post, null, 2));
+                // Remove failed URL from cache
+                MediaCache.remove(post.id);
                 img.src = 'https://placehold.co/600x600?text=Image+Unavailable';
                 div.classList.add('error');
             };
 
             img.onload = () => {
                 console.log(`Image loaded successfully for post ${post.id}`);
+                div.classList.remove('error');
             };
             
             div.addEventListener('click', () => {
@@ -148,8 +161,18 @@ function showPost(index) {
     prevBtn.disabled = index === 0;
     nextBtn.disabled = index === posts.length - 1;
 
+    // Try to get image URL from cache first
+    let imageUrl = MediaCache.get(post.id);
+    if (!imageUrl) {
+        imageUrl = post.permalink + 'media/?size=l';
+        // Cache the URL if loading is successful
+        modalImage.addEventListener('load', () => {
+            MediaCache.set(post.id, imageUrl);
+        }, { once: true });
+    }
+
     // Update modal content
-    modalImage.src = post.permalink + 'media/?size=l';
+    modalImage.src = imageUrl;
     modalImage.alt = post.caption || 'Instagram post';
     modalCaption.textContent = post.caption || '';
     modalDate.textContent = new Date(post.timestamp).toLocaleDateString();
@@ -162,6 +185,8 @@ function showPost(index) {
     // Update modal image error handling
     modalImage.onerror = () => {
         console.error('Modal image failed to load:', post.permalink);
+        // Remove failed URL from cache
+        MediaCache.remove(post.id);
         modalImage.src = 'https://placehold.co/600x600?text=Image+Unavailable';
     };
 }
