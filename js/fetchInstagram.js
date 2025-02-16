@@ -10,11 +10,23 @@ async function fetchInstagramPosts() {
     try {
         console.log('Fetching Instagram posts...');
         const data = await getInstagramData();
-        console.log('Fetched data:', data ? `${data.length} posts` : 'No data');
-        if (!data || data.length === 0) {
+        console.log('Raw data:', data);
+        
+        if (!data) {
+            console.error('No data received from getInstagramData');
+            throw new Error('No data received');
+        }
+        
+        if (!Array.isArray(data.data)) {
+            console.error('Data is not in expected format:', data);
+            throw new Error('Invalid data format');
+        }
+        
+        console.log('Fetched data:', data.data ? `${data.data.length} posts` : 'No posts in data');
+        if (!data.data || data.data.length === 0) {
             throw new Error('No posts found');
         }
-        return data;
+        return data.data;
     } catch (error) {
         console.error('Error fetching Instagram posts:', error);
         throw error;
