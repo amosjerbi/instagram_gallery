@@ -40,33 +40,31 @@ function showMorePosts() {
         const div = document.createElement('div');
         div.className = 'gallery-item';
 
-        const img = document.createElement('img');
-        img.className = 'gallery-img';
+        // Create a link to the Instagram post
+        const link = document.createElement('a');
+        link.href = post.permalink || `https://instagram.com/p/${post.id}`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
         
-        // Only use URLs that are direct Instagram CDN links
-        if (!post.media_url.includes('instagram.com')) {
-            console.warn('Skipping post due to invalid media URL:', post.id);
-            return;
-        }
-
-        img.src = post.media_url;
-        img.alt = post.caption || 'Instagram post';
-        img.loading = 'lazy';
+        // Create thumbnail div with post type indicator
+        const thumbnail = document.createElement('div');
+        thumbnail.className = 'thumbnail';
         
-        // Add error handler for images
-        img.onerror = () => {
-            console.error('Failed to load image:', post.media_url);
-            div.style.display = 'none'; // Hide failed items
-        };
-
-        div.appendChild(img);
+        // Add media type indicator
+        const typeIndicator = document.createElement('span');
+        typeIndicator.className = 'media-type';
+        typeIndicator.textContent = post.media_type === 'VIDEO' ? '▶️' : 
+                                  post.media_type === 'CAROUSEL_ALBUM' ? '📑' : '📷';
         
-        // Add click event listener to show the modal
-        div.addEventListener('click', () => {
-            showPost(startIndex + index);
-            document.getElementById('modal').style.display = 'block';
-        });
-
+        // Add caption preview
+        const caption = document.createElement('div');
+        caption.className = 'caption-preview';
+        caption.textContent = post.caption ? post.caption.slice(0, 100) + '...' : '';
+        
+        thumbnail.appendChild(typeIndicator);
+        thumbnail.appendChild(caption);
+        link.appendChild(thumbnail);
+        div.appendChild(link);
         document.getElementById('gallery').appendChild(div);
     });
     
