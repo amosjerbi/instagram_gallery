@@ -40,31 +40,24 @@ function showMorePosts() {
         const div = document.createElement('div');
         div.className = 'gallery-item';
 
-        // Create a link to the Instagram post
-        const link = document.createElement('a');
-        link.href = post.permalink || `https://instagram.com/p/${post.id}`;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        
-        // Create thumbnail div with post type indicator
-        const thumbnail = document.createElement('div');
-        thumbnail.className = 'thumbnail';
-        
-        // Add media type indicator
-        const typeIndicator = document.createElement('span');
-        typeIndicator.className = 'media-type';
-        typeIndicator.textContent = post.media_type === 'VIDEO' ? '▶️' : 
-                                  post.media_type === 'CAROUSEL_ALBUM' ? '📑' : '📷';
-        
-        // Add caption preview
-        const caption = document.createElement('div');
-        caption.className = 'caption-preview';
-        caption.textContent = post.caption ? post.caption.slice(0, 100) + '...' : '';
-        
-        thumbnail.appendChild(typeIndicator);
-        thumbnail.appendChild(caption);
-        link.appendChild(thumbnail);
-        div.appendChild(link);
+        // Create the embed iframe
+        const iframe = document.createElement('iframe');
+        iframe.className = 'instagram-embed';
+        iframe.src = `https://www.instagram.com/p/${post.id}/embed`;
+        iframe.width = '100%';
+        iframe.height = '100%';
+        iframe.frameBorder = '0';
+        iframe.scrolling = 'no';
+        iframe.allowTransparency = true;
+
+        div.appendChild(iframe);
+
+        // Add click event listener to show the modal
+        div.addEventListener('click', (e) => {
+            e.preventDefault();
+            showModal(post, index);
+        });
+
         document.getElementById('gallery').appendChild(div);
     });
     
@@ -77,39 +70,76 @@ function showMorePosts() {
             loadMoreBtn.style.display = 'block';
         }
     }
+    
+    // Add Instagram embed script
+    if (!document.getElementById('instagram-embed-script')) {
+        const script = document.createElement('script');
+        script.id = 'instagram-embed-script';
+        script.src = '//www.instagram.com/embed.js';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+    }
 }
 
-function showPost(index) {
-    if (index >= 0 && index < posts.length) {
-        currentPostIndex = index;
-        const post = posts[index];
-        const modalImg = document.getElementById('modalImage');
-        const modalLink = document.getElementById('modalLink');
-        const prevBtn = document.querySelector('.prev-btn');
-        const nextBtn = document.querySelector('.next-btn');
-        
-        if (modalImg && modalLink) {
-            modalImg.src = post.media_url;
-            modalLink.href = post.permalink;
-            
-            // Update navigation buttons visibility
-            if (prevBtn) prevBtn.style.display = index === 0 ? 'none' : 'block';
-            if (nextBtn) nextBtn.style.display = index === posts.length - 1 ? 'none' : 'block';
-        }
-    }
+function showModal(post, index) {
+    const modal = document.getElementById('modal');
+    const modalContent = modal.querySelector('.modallic-content');
+    
+    // Create embed iframe for modal
+    const iframe = document.createElement('iframe');
+    iframe.src = `https://www.instagram.com/p/${post.id}/embed/captioned`;
+    iframe.width = '100%';
+    iframe.height = '100%';
+    iframe.frameBorder = '0';
+    iframe.scrolling = 'no';
+    iframe.allowTransparency = true;
+    
+    // Clear previous content and add new iframe
+    modalContent.innerHTML = '';
+    modalContent.appendChild(iframe);
+    
+    // Show modal
+    modal.style.display = 'flex';
+    
+    // Update navigation buttons
+    const prevBtn = modal.querySelector('.prev-btn');
+    const nextBtn = modal.querySelector('.next-btn');
+    
+    prevBtn.style.display = index > 0 ? 'block' : 'none';
+    nextBtn.style.display = index < posts.length - 1 ? 'block' : 'none';
+    
+    prevBtn.onclick = () => {
+        if (index > 0) showModal(posts[index - 1], index - 1);
+    };
+    
+    nextBtn.onclick = () => {
+        if (index < posts.length - 1) showModal(posts[index + 1], index + 1);
+    };
+    
+    // Close button handler
+    const closeBtn = modal.querySelector('.close');
+    closeBtn.onclick = () => {
+        modal.style.display = 'none';
+    };
+    
+    // Close on outside click
+    modal.onclick = (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    };
 }
 
 function nextPost() {
     console.log('Next post called, current index:', currentPostIndex);
     if (currentPostIndex < posts.length - 1) {
-        showPost(currentPostIndex + 1);
+        showModal(posts[currentPostIndex + 1], currentPostIndex + 1);
     }
 }
 
 function prevPost() {
     console.log('Previous post called, current index:', currentPostIndex);
     if (currentPostIndex > 0) {
-        showPost(currentPostIndex - 1);
+        showModal(posts[currentPostIndex - 1], currentPostIndex - 1);
     }
 }
 
