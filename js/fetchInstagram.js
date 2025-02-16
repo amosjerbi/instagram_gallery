@@ -1,5 +1,6 @@
 import config, { getInstagramData } from './config.js';
 
+let currentPage = 0;
 let posts = []; 
 let currentPostIndex = 0;
 let isLoading = false;
@@ -38,15 +39,25 @@ async function showMorePosts() {
     try {
         if (posts.length === 0) {
             // Initial load
-            const newPosts = await fetchInstagramPosts();
-            if (newPosts && newPosts.length > 0) {
-                posts = posts.concat(newPosts);
-                displayPosts(posts);
+            const allPosts = await fetchInstagramPosts();
+            if (allPosts && allPosts.length > 0) {
+                posts = allPosts;
             }
+        }
+
+        const startIndex = currentPage * config.postsPerPage;
+        const endIndex = startIndex + config.postsPerPage;
+        const postsToDisplay = posts.slice(startIndex, endIndex);
+        
+        if (postsToDisplay.length > 0) {
+            displayPostsBatch(postsToDisplay);
+            currentPage++;
+            hasMore = endIndex < posts.length;
+        } else {
+            hasMore = false;
         }
         
         isLoading = false;
-        hasMore = false; // Since we load all posts at once now
         
     } catch (error) {
         console.error('Error loading posts:', error);
@@ -157,7 +168,40 @@ function initTouchGestures() {
     }
 }
 
-async function loadInstagramPosts() {
+function displayPostsBatch(newPosts) {
+    const gallery = document.getElementById('gallery');
+    if (!gallery) return;
+    
+    if (!newPosts || newPosts.length === 0) {
+        if (posts.length === 0) {
+            gallery.innerHTML = '<div class="error">No posts found</div>';
+        }
+        return;
+    }
+    
+    newPosts.forEach((post, index) => {
+        if (!post.media_url) return; // Skip posts without media
+        
+        const div = document.createElement('div');
+        div.className = 'gallery-item';
+        
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.src = post.media_url;
+        img.alt = post.caption || 'Instagram post';
+        
+        div.addEventListener('click', () => {
+            showPost(index + (currentPage - 1) * config.postsPerPage);
+            const modal = document.getElementById('modal');
+            modal.classList.add('show');
+        });
+        
+        div.appendChild(img);
+        gallery.appendChild(div);
+    });
+}
+
+function loadInstagramPosts() {
     const gallery = document.getElementById('gallery');
     if (!gallery) {
         console.error('Gallery element not found');
@@ -166,6 +210,7 @@ async function loadInstagramPosts() {
 
     // Reset state
     posts = [];
+    currentPage = 0;
     currentPostIndex = 0;
     isLoading = false;
     hasMore = true;
@@ -173,15 +218,7 @@ async function loadInstagramPosts() {
     gallery.innerHTML = '';
     
     try {
-        await showMorePosts();
-        
-        if (posts.length === 0) {
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error';
-            errorDiv.textContent = 'No posts found';
-            gallery.appendChild(errorDiv);
-            return;
-        }
+        showMorePosts();
         
         // Initialize modal controls
         initModalControls();
@@ -232,39 +269,6 @@ function createSentinel() {
     sentinel.style.width = '100%';
     document.getElementById('gallery').appendChild(sentinel);
     intersectionObserver.observe(sentinel);
-}
-
-function displayPosts(posts) {
-    const gallery = document.getElementById('gallery');
-    if (!gallery) return;
-    
-    gallery.innerHTML = ''; // Clear existing content
-    
-    if (!posts || posts.length === 0) {
-        gallery.innerHTML = '<div class="error">No posts found</div>';
-        return;
-    }
-    
-    posts.forEach((post, index) => {
-        if (!post.media_url) return; // Skip posts without media
-        
-        const div = document.createElement('div');
-        div.className = 'gallery-item';
-        
-        const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.src = post.media_url;
-        img.alt = post.caption || 'Instagram post';
-        
-        div.addEventListener('click', () => {
-            showPost(index);
-            const modal = document.getElementById('modal');
-            modal.classList.add('show');
-        });
-        
-        div.appendChild(img);
-        gallery.appendChild(div);
-    });
 }
 
 // Initialize
