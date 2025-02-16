@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "id": "1",
+      "caption": "Sample Instagram Post 1",
+      "media_type": "IMAGE",
+      "media_url": "https://picsum.photos/800/800?random=1",
+      "permalink": "#",
+      "timestamp": "2024-02-16T12:00:00+0000"
+    },
+    {
+      "id": "2",
+      "caption": "Sample Instagram Post 2",
+      "media_type": "IMAGE",
+      "media_url": "https://picsum.photos/800/800?random=2",
+      "permalink": "#",
+      "timestamp": "2024-02-16T12:00:00+0000"
+    },
+    {
+      "id": "3",
+      "caption": "Sample Instagram Post 3",
+      "media_type": "IMAGE",
+      "media_url": "https://picsum.photos/800/800?random=3",
+      "permalink": "#",
+      "timestamp": "2024-02-16T12:00:00+0000"
+    }
+  ]
+}

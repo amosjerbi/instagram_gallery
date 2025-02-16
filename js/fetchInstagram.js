@@ -8,7 +8,9 @@ let hasMore = true;
 
 async function fetchInstagramPosts() {
     try {
+        console.log('Fetching Instagram posts...');
         const data = await getInstagramData();
+        console.log('Fetched data:', data ? `${data.length} posts` : 'No data');
         if (!data || data.length === 0) {
             throw new Error('No posts found');
         }
@@ -20,8 +22,12 @@ async function fetchInstagramPosts() {
 }
 
 async function showMorePosts() {
-    if (isLoading || !hasMore) return;
+    if (isLoading || !hasMore) {
+        console.log('Skipping showMorePosts - isLoading:', isLoading, 'hasMore:', hasMore);
+        return;
+    }
     isLoading = true;
+    console.log('Loading more posts...');
 
     const loadingIndicator = document.createElement('div');
     loadingIndicator.className = 'loading-indicator';
@@ -39,21 +45,27 @@ async function showMorePosts() {
     try {
         if (posts.length === 0) {
             // Initial load
+            console.log('Initial load - fetching all posts');
             const allPosts = await fetchInstagramPosts();
             if (allPosts && allPosts.length > 0) {
                 posts = allPosts;
+                console.log('Successfully loaded', posts.length, 'posts');
             }
         }
 
         const startIndex = currentPage * config.postsPerPage;
         const endIndex = startIndex + config.postsPerPage;
+        console.log('Displaying posts from index', startIndex, 'to', endIndex);
         const postsToDisplay = posts.slice(startIndex, endIndex);
         
         if (postsToDisplay.length > 0) {
+            console.log('Displaying batch of', postsToDisplay.length, 'posts');
             displayPostsBatch(postsToDisplay);
             currentPage++;
             hasMore = endIndex < posts.length;
+            console.log('Updated state - currentPage:', currentPage, 'hasMore:', hasMore);
         } else {
+            console.log('No more posts to display');
             hasMore = false;
         }
         
@@ -169,10 +181,15 @@ function initTouchGestures() {
 }
 
 function displayPostsBatch(newPosts) {
+    console.log('Displaying batch of posts:', newPosts.length);
     const gallery = document.getElementById('gallery');
-    if (!gallery) return;
+    if (!gallery) {
+        console.error('Gallery element not found');
+        return;
+    }
     
     if (!newPosts || newPosts.length === 0) {
+        console.log('No posts to display in this batch');
         if (posts.length === 0) {
             gallery.innerHTML = '<div class="error">No posts found</div>';
         }
@@ -180,7 +197,10 @@ function displayPostsBatch(newPosts) {
     }
     
     newPosts.forEach((post, index) => {
-        if (!post.media_url) return; // Skip posts without media
+        if (!post.media_url) {
+            console.log('Skipping post', index, '- no media_url');
+            return;
+        }
         
         const div = document.createElement('div');
         div.className = 'gallery-item';
@@ -199,6 +219,7 @@ function displayPostsBatch(newPosts) {
         div.appendChild(img);
         gallery.appendChild(div);
     });
+    console.log('Finished displaying batch of posts');
 }
 
 function loadInstagramPosts() {
