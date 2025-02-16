@@ -38,7 +38,7 @@ function showMorePosts() {
     
     postsToShow.forEach((post, index) => {
         const div = document.createElement('div');
-        div.className = 'gallery-item';
+        div.className = 'gallery';
 
         const img = document.createElement('img');
         img.className = 'img';
