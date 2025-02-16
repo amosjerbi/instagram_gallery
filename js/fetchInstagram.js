@@ -196,6 +196,12 @@ function displayPostsBatch(newPosts) {
         return;
     }
     
+    // Remove existing sentinel before adding new posts
+    const existingSentinel = document.querySelector('.sentinel');
+    if (existingSentinel) {
+        existingSentinel.remove();
+    }
+    
     newPosts.forEach((post, index) => {
         if (!post.media_url) {
             console.log('Skipping post', index, '- no media_url');
@@ -219,6 +225,9 @@ function displayPostsBatch(newPosts) {
         div.appendChild(img);
         gallery.appendChild(div);
     });
+    
+    // Create new sentinel after adding posts
+    createSentinel();
     console.log('Finished displaying batch of posts');
 }
 
@@ -270,7 +279,7 @@ const observerOptions = {
 const intersectionObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting && !isLoading && hasMore) {
-            console.log('Loading more posts...');
+            console.log('Sentinel is visible, loading more posts...');
             showMorePosts();
         }
     });
@@ -278,7 +287,7 @@ const intersectionObserver = new IntersectionObserver((entries) => {
 
 // Create and observe sentinel element
 function createSentinel() {
-    // Remove existing sentinel
+    // Remove existing sentinel if it exists
     const existingSentinel = document.querySelector('.sentinel');
     if (existingSentinel) {
         existingSentinel.remove();
@@ -286,9 +295,12 @@ function createSentinel() {
     
     const sentinel = document.createElement('div');
     sentinel.className = 'sentinel';
-    sentinel.style.height = '1px';
+    sentinel.style.height = '20px';  // Make it a bit taller
     sentinel.style.width = '100%';
+    sentinel.style.marginTop = '20px';  // Add some margin
     document.getElementById('gallery').appendChild(sentinel);
+    
+    console.log('Created new sentinel element');
     intersectionObserver.observe(sentinel);
 }
 
