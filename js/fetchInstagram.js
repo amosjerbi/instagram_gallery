@@ -133,13 +133,13 @@ async function loadInstagramPosts() {
         console.log('Received data:', data);
         gallery.innerHTML = ''; // Only clear the gallery div
 
-        if (!Array.isArray(data)) {
+        if (!data.data || !Array.isArray(data.data)) {
             console.error('Invalid data format:', data);
             throw new Error('Invalid data format');
         }
 
         // Store posts globally and filter media types
-        posts = data.filter(post =>
+        posts = data.data.filter(post =>
             config.allowedMediaTypes.includes(post.media_type)
         );
         console.log('Filtered posts:', posts.length);
