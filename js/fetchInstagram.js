@@ -42,15 +42,20 @@ function showMorePosts() {
 
         const img = document.createElement('img');
         img.className = 'gallery-img';
-        img.src = post.media_url;
+        // Convert relative path to absolute URL if needed
+        const imageUrl = post.media_url.startsWith('http') 
+            ? post.media_url 
+            : post.media_url.startsWith('/') 
+                ? post.media_url.slice(1) // Remove leading slash
+                : post.media_url;
+        img.src = imageUrl;
         img.alt = post.caption || 'Instagram post';
         img.loading = 'lazy';
         
         // Add error handling for images
         img.onerror = () => {
-            console.error('Failed to load image:', post.media_url);
-            img.src = 'assets/images/placeholder.jpg'; // Add a placeholder image
-            div.classList.add('error');
+            console.error('Failed to load image:', imageUrl);
+            img.src = 'imgs/placeholder.png'; // Fallback image
         };
         
         // Add click event listener to show the modal
@@ -139,9 +144,10 @@ async function loadInstagramPosts() {
         }
 
         // Store posts globally and filter media types
-        posts = data.data.filter(post =>
-            config.allowedMediaTypes.includes(post.media_type)
-        );
+        posts = data.data.filter(post => {
+            console.log('Post media URL:', post.media_url);
+            return config.allowedMediaTypes.includes(post.media_type);
+        });
         console.log('Filtered posts:', posts.length);
 
         if (posts.length === 0) {
