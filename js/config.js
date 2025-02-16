@@ -1,6 +1,6 @@
 // Instagram Gallery Configuration
 const config = {
-    postsPerPage: 3,  // Changed from 50 to 3 for testing
+    postsPerPage: 12,
     maxPosts: 270,
     apiFields: 'id,caption,media_type,media_url,permalink,timestamp',
     allowedMediaTypes: ['IMAGE', 'CAROUSEL_ALBUM']
@@ -9,7 +9,7 @@ const config = {
 // Instagram data management
 export async function getInstagramData() {
     try {
-        const response = await fetch('./assets/data/instagram-posts.json');
+        const response = await fetch('https://amosjerbi.github.io/instagram_gallery/data/instagram.json');
         if (!response.ok) {
             throw new Error('Failed to load Instagram data');
         }
