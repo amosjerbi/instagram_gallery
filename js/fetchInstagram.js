@@ -17,16 +17,19 @@ async function fetchInstagramPosts() {
             throw new Error('No data received');
         }
         
-        if (!Array.isArray(data.data)) {
+        // Handle both array and object with data property
+        const posts = Array.isArray(data) ? data : data.data;
+        
+        if (!Array.isArray(posts)) {
             console.error('Data is not in expected format:', data);
             throw new Error('Invalid data format');
         }
         
-        console.log('Fetched data:', data.data ? `${data.data.length} posts` : 'No posts in data');
-        if (!data.data || data.data.length === 0) {
+        console.log('Fetched data:', posts ? `${posts.length} posts` : 'No posts');
+        if (!posts || posts.length === 0) {
             throw new Error('No posts found');
         }
-        return data.data;
+        return posts;
     } catch (error) {
         console.error('Error fetching Instagram posts:', error);
         throw error;
