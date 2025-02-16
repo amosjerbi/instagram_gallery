@@ -1,114 +1,76 @@
 import config from './config.js';
-import token from './token.js';
 
-let posts = []; 
+let posts = []; // Global variable to store posts
 let currentPostIndex = 0;
 let currentPage = 1;
 
-const shimmerTypes = ['shimmer-sweep', 'shimmer-pulse', 'shimmer-wave', 'shimmer-spotlight'];
-let currentShimmerType = 'shimmer-spotlight'; // Default to first option
-
-function createLoadingPlaceholder() {
-    const placeholder = document.createElement('div');
-    placeholder.className = `masonry-item loading ${currentShimmerType}`;
-    // Add modern variant if desired
-    placeholder.className += ' modern';
-    return placeholder;
-}
-
-async function fetchInstagramPosts() {
-    const fields = 'id,caption,media_type,media_url,permalink,timestamp';
-    const limit = config.maxPosts;
-    
-    const url = `https://graph.instagram.com/me/media?fields=${fields}&access_token=${token.instagramToken}&limit=${limit}`;
-    
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error('Error fetching Instagram posts:', error);
-        throw error;
+function initTouchGestures() {
+    const modalContent = document.querySelector('.modallic-content');
+    if (!modalContent || !window.Hammer) {
+        console.error('Modal content or Hammer.js not found');
+        return;
     }
+
+    const hammer = new Hammer(modalContent);
+    
+    // Configure horizontal swipe
+    hammer.get('swipe').set({ 
+        direction: Hammer.DIRECTION_HORIZONTAL,
+        threshold: 5,
+        velocity: 0.1
+    });
+    
+    hammer.on('swipeleft', () => {
+        console.log('Swipe left detected');
+        nextPost();
+    });
+    
+    hammer.on('swiperight', () => {
+        console.log('Swipe right detected');
+        prevPost();
+    });
 }
 
-function showMorePosts(isLoadMore = false) {
+function showMorePosts() {
     const startIndex = (currentPage - 1) * config.postsPerPage;
     const endIndex = startIndex + config.postsPerPage;
     const postsToShow = posts.slice(startIndex, endIndex);
     
-    const gallery = document.querySelector('.masonry-gallery');
-    const loadMoreBtn = document.querySelector('.load-more-btn');
-    if (!gallery) return;
-
-    // Only clear the gallery if it's not a load more action
-    if (!isLoadMore) {
-        gallery.innerHTML = '';
-    }
-
     postsToShow.forEach((post, index) => {
-        if (post.media_type !== 'VIDEO') {
-            const div = document.createElement('div');
-            div.className = 'masonry-item';
+        const div = document.createElement('div');
+        div.className = 'flow';
 
-            const img = document.createElement('img');
-            img.src = post.media_url;
-            img.alt = post.caption || 'Instagram post';
-            img.loading = 'lazy';
-            
-            img.onerror = () => {
-                console.error('Failed to load image:', post.media_url);
-                div.classList.add('error');
-            };
-            
-            div.addEventListener('click', () => {
-                showPost(startIndex + index);
-                document.getElementById('modal').style.display = 'block';
-            });
+        const img = document.createElement('img');
+        img.className = 'img';
+        img.src = post.media_url;
+        img.alt = post.caption || 'Instagram post';
+        img.loading = 'lazy';
+        
+        // Add error handling for images
+        img.onerror = () => {
+            console.error('Failed to load image:', post.media_url);
+            img.src = 'assets/images/placeholder.jpg'; // Add a placeholder image
+            div.classList.add('error');
+        };
+        
+        // Add click event listener to show the modal
+        div.addEventListener('click', () => {
+            showPost(startIndex + index);
+            document.getElementById('modal').style.display = 'block';
+        });
 
-            div.appendChild(img);
-            gallery.appendChild(div);
-        }
+        div.appendChild(img);
+        document.getElementById('gallery').appendChild(div);
     });
-
-    // Update load more button visibility
+    
+    // Show/hide load more button
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
     if (loadMoreBtn) {
         if (endIndex >= posts.length) {
             loadMoreBtn.style.display = 'none';
         } else {
             loadMoreBtn.style.display = 'block';
-            loadMoreBtn.classList.remove('loading');
-            loadMoreBtn.disabled = false;
         }
-    }
-}
-
-async function loadMore() {
-    const loadMoreBtn = document.querySelector('.load-more-btn');
-    const gallery = document.querySelector('.masonry-gallery');
-    
-    if (loadMoreBtn) {
-        loadMoreBtn.classList.add('loading');
-        loadMoreBtn.textContent = 'Loading...';
-        loadMoreBtn.disabled = true;
-    }
-    
-    // Cycle through shimmer types for variety
-    currentShimmerType = shimmerTypes[(shimmerTypes.indexOf(currentShimmerType) + 1) % shimmerTypes.length];
-    
-    const placeholderCount = config.postsPerPage;
-    for (let i = 0; i < placeholderCount; i++) {
-        gallery.appendChild(createLoadingPlaceholder());
-    }
-    
-    currentPage++;
-    showMorePosts(true);
-    
-    if (loadMoreBtn) {
-        loadMoreBtn.textContent = 'Load More';
     }
 }
 
@@ -125,6 +87,7 @@ function showPost(index) {
             modalImg.src = post.media_url;
             modalLink.href = post.permalink;
             
+            // Update navigation buttons visibility
             if (prevBtn) prevBtn.style.display = index === 0 ? 'none' : 'block';
             if (nextBtn) nextBtn.style.display = index === posts.length - 1 ? 'none' : 'block';
         }
@@ -132,71 +95,110 @@ function showPost(index) {
 }
 
 function nextPost() {
+    console.log('Next post called, current index:', currentPostIndex);
     if (currentPostIndex < posts.length - 1) {
         showPost(currentPostIndex + 1);
     }
 }
 
 function prevPost() {
+    console.log('Previous post called, current index:', currentPostIndex);
     if (currentPostIndex > 0) {
         showPost(currentPostIndex - 1);
     }
 }
 
-async function initializeGallery() {
-    const gallery = document.querySelector('.masonry-gallery');
+async function loadInstagramPosts() {
+    const gallery = document.getElementById('gallery');
     if (!gallery) {
         console.error('Gallery element not found');
         return;
     }
 
+    // Create a loading container
+    const loadingContainer = document.createElement('div');
+    loadingContainer.className = 'loading';
+    loadingContainer.textContent = 'Loading posts...';
+    gallery.appendChild(loadingContainer);
+    
     try {
-        gallery.classList.add('initializing');
-        gallery.innerHTML = '';
-        
-        const placeholderCount = window.innerWidth > 1400 ? 12 : 
-                               window.innerWidth > 1024 ? 9 : 
-                               window.innerWidth > 480 ? 6 : 4;
-        
-        for (let i = 0; i < placeholderCount; i++) {
-            gallery.appendChild(createLoadingPlaceholder());
+        console.log('Fetching Instagram posts...');
+        // Load the JSON file generated by the GitHub Actions workflow
+        const response = await fetch('assets/data/instagram-posts.json');
+        if (!response.ok) {
+            console.error('Failed to fetch posts:', response.status, response.statusText);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
-        const data = await fetchInstagramPosts();
-        console.log('Received Instagram data:', data);
-        
+
+        const data = await response.json();
+        console.log('Received data:', data);
+        gallery.innerHTML = ''; // Only clear the gallery div
+
         if (!data.data || data.data.length === 0) {
-            gallery.innerHTML = '<div class="error">No posts found</div>';
+            console.error('No posts found in the response');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = 'No posts found';
+            gallery.appendChild(errorDiv);
             return;
         }
 
-        posts = data.data;
-        currentPage = 1;
-        
-        gallery.classList.remove('initializing');
-        gallery.innerHTML = '';
-        
-        showMorePosts(false);
+        // Store posts globally and filter media types
+        posts = data.data.filter(post =>
+            config.allowedMediaTypes.includes(post.media_type)
+        );
+        console.log('Filtered posts:', posts.length);
 
-        // Set up load more button
-        const loadMoreBtn = document.querySelector('.load-more-btn');
-        if (loadMoreBtn) {
-            loadMoreBtn.removeEventListener('click', loadMore);
-            loadMoreBtn.addEventListener('click', loadMore);
+        if (posts.length === 0) {
+            console.error('No posts match the allowed media types:', config.allowedMediaTypes);
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = 'No compatible posts found';
+            gallery.appendChild(errorDiv);
+            return;
         }
 
+        // Add click event for load more
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => {
+                currentPage++;
+                showMorePosts();
+            });
+        }
+
+        // Show initial posts
+        showMorePosts();
+
+        // Initialize touch gestures
+        initTouchGestures();
+
+        // Add modal close functionality
         const modal = document.getElementById('modal');
         const closeBtn = document.querySelector('.close');
         if (closeBtn) {
             closeBtn.onclick = () => modal.style.display = 'none';
         }
         
+        // Add navigation button functionality
         const prevBtn = document.querySelector('.prev-btn');
         const nextBtn = document.querySelector('.next-btn');
         
-        if (prevBtn) prevBtn.addEventListener('click', prevPost);
-        if (nextBtn) nextBtn.addEventListener('click', nextPost);
+        if (prevBtn) {
+            prevBtn.addEventListener('click', prevPost);
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', nextPost);
+        }
         
+        // Add click outside modal to close
+        window.onclick = (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
+
+        // Add keyboard navigation
         document.addEventListener('keydown', (e) => {
             if (modal.style.display === 'block') {
                 if (e.key === 'ArrowLeft') prevPost();
@@ -206,13 +208,13 @@ async function initializeGallery() {
         });
 
     } catch (error) {
-        console.error('Failed to initialize gallery:', error);
-        gallery.innerHTML = '<div class="error">Failed to load Instagram posts</div>';
+        console.error('Error loading posts:', error);
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error';
+        errorDiv.textContent = 'Error loading posts. Please try again later.';
+        gallery.appendChild(errorDiv);
     }
 }
 
-// Initialize gallery when DOM is loaded
-document.addEventListener('DOMContentLoaded', initializeGallery);
-
-// Export functions for external use
-export { initializeGallery, showMorePosts, prevPost, nextPost, loadMore };
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', loadInstagramPosts);
