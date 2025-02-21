@@ -3,7 +3,7 @@ name: Fetch Instagram Posts
 on:
   push:
     branches:
-      - master
+      - gh-pages
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'  # Run at midnight UTC every day
