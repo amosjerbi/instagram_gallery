@@ -15,6 +15,7 @@ permissions:
 jobs:
   fetch-instagram:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/gh-pages'  # Only run on gh-pages branch
     environment: github-pages
     env:
       INSTAGRAM_TOKEN: ${{ secrets.INSTAGRAM_TOKEN }}
@@ -23,9 +24,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: gh-pages
+          ref: gh-pages  # Explicitly checkout gh-pages branch
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+
+      - name: Verify branch
+        run: |
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$CURRENT_BRANCH" != "gh-pages" ]; then
+            echo "Error: Must run on gh-pages branch, current branch is $CURRENT_BRANCH"
+            exit 1
+          fi
+          echo "Verified running on gh-pages branch"
 
       - name: Verify secrets
         run: |
