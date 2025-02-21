@@ -13,12 +13,12 @@ logging.basicConfig(
 )
 
 # Constants
-API_FIELDS = "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}"
+API_FIELDS = "id,caption,media_type,media_url,permalink,timestamp"  # Simplified fields
 POSTS_PER_PAGE = 50
 
 def fetch_instagram_media(access_token, limit=POSTS_PER_PAGE):
     """
-    Fetch media from Instagram Graph API
+    Fetch media from Instagram Graph API with simplified fields
     """
     base_url = "https://graph.instagram.com/me/media"
     params = {
@@ -32,22 +32,37 @@ def fetch_instagram_media(access_token, limit=POSTS_PER_PAGE):
         response = requests.get(base_url, params=params)
         response.raise_for_status()
         
-        # Try to parse the JSON response
+        # Get the raw text first
+        raw_text = response.text
+        logging.info(f"Response length: {len(raw_text)} characters")
+        
+        # Try to clean the response if needed
+        cleaned_text = raw_text.strip()
+        if cleaned_text.endswith('}]}'):  # Ensure proper JSON ending
+            cleaned_text = cleaned_text[:cleaned_text.rindex('}]}') + 3]
+        
         try:
-            data = response.json()
+            # Try to parse the cleaned JSON
+            data = json.loads(cleaned_text)
+            
             # Validate the response structure
             if not isinstance(data, dict):
-                raise ValueError("Response is not a valid JSON object")
+                raise ValueError(f"Response is not a valid JSON object, got {type(data)}")
             if "data" not in data:
-                raise ValueError("Response missing 'data' field")
+                raise ValueError(f"Response missing 'data' field. Keys found: {list(data.keys())}")
             if not isinstance(data["data"], list):
-                raise ValueError("'data' field is not a list")
+                raise ValueError(f"'data' field is not a list, got {type(data['data'])}")
             
+            # Log success info
+            logging.info(f"Successfully fetched {len(data['data'])} media items")
             return data
             
         except json.JSONDecodeError as e:
             logging.error(f"Failed to parse JSON response: {str(e)}")
-            logging.error(f"Response content: {response.text[:1000]}...")  # Show first 1000 chars
+            logging.error("First 500 characters of response:")
+            logging.error(raw_text[:500])
+            logging.error("Last 500 characters of response:")
+            logging.error(raw_text[-500:])
             raise
             
     except requests.exceptions.RequestException as e:
@@ -55,12 +70,13 @@ def fetch_instagram_media(access_token, limit=POSTS_PER_PAGE):
         if response:
             logging.error(f"Response status code: {response.status_code}")
             logging.error(f"Response headers: {dict(response.headers)}")
-            logging.error(f"Response content: {response.text[:1000]}...")  # Show first 1000 chars
+            logging.error("First 500 characters of response:")
+            logging.error(response.text[:500])
         raise
 
 def save_json(data, filename):
     """
-    Save data to JSON file with proper formatting
+    Save data to JSON file with proper formatting and validation
     """
     try:
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -68,6 +84,10 @@ def save_json(data, filename):
         # Validate data before saving
         if not isinstance(data, dict):
             raise ValueError(f"Data must be a dictionary, got {type(data)}")
+        
+        # Ensure we have the expected structure
+        if "data" not in data:
+            raise ValueError("Missing 'data' field in the response")
         
         # Convert to string first to validate JSON
         json_str = json.dumps(data, ensure_ascii=False, indent=2)
@@ -77,6 +97,7 @@ def save_json(data, filename):
             f.write(json_str)
             
         logging.info(f"Successfully saved data to {filename}")
+        logging.info(f"Saved {len(data['data'])} media items")
         
     except Exception as e:
         logging.error(f"Failed to save JSON file: {e}")
