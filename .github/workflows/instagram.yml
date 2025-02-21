@@ -8,15 +8,38 @@ on:
   schedule:
     - cron: '0 0 * * *'  # Run at midnight UTC every day
 
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   fetch-instagram:
     runs-on: ubuntu-latest
-
+    environment: github-pages
+    env:
+      INSTAGRAM_TOKEN: ${{ secrets.INSTAGRAM_TOKEN }}
+    
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: gh-pages
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Verify secrets
+        run: |
+          if [ -z "$INSTAGRAM_TOKEN" ]; then
+            echo "::error::INSTAGRAM_TOKEN is not set. Please add it to your repository secrets."
+            echo "To add the secret:"
+            echo "1. Go to your repository settings"
+            echo "2. Click on 'Secrets and variables' under 'Security'"
+            echo "3. Click on 'Actions'"
+            echo "4. Click 'New repository secret'"
+            echo "5. Add INSTAGRAM_TOKEN with your Instagram token"
+            exit 1
+          fi
+          echo "Instagram token is properly set"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -25,269 +48,214 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
           python -m pip install --upgrade pip
           pip install requests pillow
 
-      - name: Set up directories
+      - name: Debug environment
         run: |
-          echo "Setting up directory structure..."
-          mkdir -p assets/data/instagram/{images,videos,thumbnails}
-          chmod -R 755 assets
+          pwd
+          ls -la
+          echo "Current branch:"
+          git branch --show-current
+          echo "Git status:"
+          git status
+          echo "Python version:"
+          python --version
+          echo "Pip version:"
+          pip --version
+          echo "JQ version:"
+          jq --version
 
-      - name: Verify Instagram token
-        env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+      - name: Test Instagram API
         run: |
-          if [ -z "$INSTAGRAM_ACCESS_TOKEN" ]; then
-            echo "Error: INSTAGRAM_ACCESS_TOKEN is not set"
+          echo "Testing Instagram API access..."
+          RESPONSE=$(curl -s "https://graph.instagram.com/me?fields=id,username&access_token=$INSTAGRAM_TOKEN")
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null; then
+            echo "::error::Error accessing Instagram API:"
+            echo "$RESPONSE" | jq '.error'
             exit 1
           fi
-          
-          # Test token validity
-          RESPONSE=$(curl -s "https://graph.instagram.com/me?fields=id,username&access_token=$INSTAGRAM_ACCESS_TOKEN")
-          if ! echo "$RESPONSE" | jq -e .id > /dev/null; then
-            echo "Error: Invalid Instagram token or API request failed"
-            echo "Response: $RESPONSE"
-            exit 1
-          fi
-          echo "Instagram token verified successfully"
+          echo "Instagram API access successful"
+          echo "Connected as: $(echo "$RESPONSE" | jq -r '.username')"
+
+      - name: Create directories
+        run: |
+          mkdir -p data/instagram/images
+          echo '{"data":[]}' > data/temp-posts.json
 
       - name: Fetch Instagram posts
-        env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
         run: |
-          set -e  # Exit on any error
-          
-          echo "Starting Instagram post fetch..."
-          
-          # Initialize posts file
-          echo '{"data":[]}' > assets/data/instagram-posts.json
+          set -x  # Enable debug mode
           
           # Initialize variables
-          NEXT_URL="https://graph.instagram.com/me/media?limit=50&fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}&access_token=$INSTAGRAM_ACCESS_TOKEN"
+          NEXT_URL="https://graph.instagram.com/me/media?limit=50&fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&access_token=$INSTAGRAM_TOKEN"
           POSTS_COUNT=0
           MAX_POSTS=120
           
-          # Create Python script
-          cat > process_media.py << 'EOF'
+          # Create Python script to download and process media
+          cat > download_media.py << 'EOF'
           import json
           import os
-          import sys
           import requests
           from PIL import Image
           from io import BytesIO
-          import logging
+          import sys
+          import traceback
           
-          # Set up logging
-          logging.basicConfig(
-              level=logging.INFO,
-              format='%(asctime)s - %(levelname)s - %(message)s'
-          )
-          
-          def download_media(url, post_id, media_type, is_thumbnail=False):
+          def download_media(url, post_id, media_type, thumbnail_url=None):
               try:
-                  logging.info(f"Downloading media: {media_type} for post {post_id}")
-                  response = requests.get(url, timeout=30)
-                  response.raise_for_status()
+                  print(f"Downloading {media_type} from {url}")
                   
-                  if media_type in ['IMAGE', 'CAROUSEL_ALBUM'] or is_thumbnail:
-                      try:
+                  if media_type in ['IMAGE', 'CAROUSEL_ALBUM']:
+                      # Save image
+                      response = requests.get(url)
+                      response.raise_for_status()
+                      img = Image.open(BytesIO(response.content))
+                      img_path = f'data/instagram/images/{post_id}.jpg'
+                      img.save(img_path, 'JPEG', quality=85)
+                      print(f"Successfully saved image to {img_path}")
+                      return f'data/instagram/images/{post_id}.jpg'
+                  elif media_type == 'VIDEO':
+                      # For videos, save the thumbnail and return both URLs
+                      if thumbnail_url:
+                          response = requests.get(thumbnail_url)
+                          response.raise_for_status()
                           img = Image.open(BytesIO(response.content))
-                          if is_thumbnail:
-                              path = f'assets/data/instagram/thumbnails/{post_id}.jpg'
-                          else:
-                              path = f'assets/data/instagram/images/{post_id}.jpg'
-                          img.save(path, 'JPEG', quality=85)
-                          logging.info(f"Saved image to {path}")
-                          return f'/assets/data/instagram/{"thumbnails" if is_thumbnail else "images"}/{post_id}.jpg'
-                      except Exception as e:
-                          logging.error(f"Error processing image: {e}")
-                          return None
-                  
-                  elif media_type in ['VIDEO', 'REEL']:
-                      try:
-                          path = f'assets/data/instagram/videos/{post_id}.mp4'
-                          with open(path, 'wb') as f:
-                              f.write(response.content)
-                          logging.info(f"Saved video to {path}")
-                          return f'/assets/data/instagram/videos/{post_id}.mp4'
-                      except Exception as e:
-                          logging.error(f"Error saving video: {e}")
-                          return None
-                  
-              except requests.exceptions.RequestException as e:
-                  logging.error(f"Network error downloading media for post {post_id}: {e}")
+                          img_path = f'data/instagram/images/{post_id}_thumb.jpg'
+                          img.save(img_path, 'JPEG', quality=85)
+                          print(f"Successfully saved video thumbnail to {img_path}")
+                          return {
+                              'video_url': url,
+                              'thumbnail_url': f'data/instagram/images/{post_id}_thumb.jpg'
+                          }
+                      return {
+                          'video_url': url,
+                          'thumbnail_url': None
+                      }
+                  else:
+                      print(f"Unsupported media type: {media_type}")
+                      return None
+                      
               except Exception as e:
-                  logging.error(f"Unexpected error downloading media for post {post_id}: {e}")
-              return None
+                  print(f"Error downloading media for post {post_id}: {e}")
+                  traceback.print_exc()
+                  return None
           
-          def process_posts(input_file, output_file):
+          def process_posts(posts_file):
               try:
-                  with open(input_file, 'r') as f:
+                  print(f"Processing posts from {posts_file}")
+                  with open(posts_file, 'r') as f:
                       data = json.load(f)
-              except json.JSONDecodeError as e:
-                  logging.error(f"Error reading JSON from {input_file}: {e}")
-                  return False
+                  
+                  for post in data['data']:
+                      media_type = post.get('media_type', '')
+                      if media_type in ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO']:
+                          result = download_media(
+                              post['media_url'], 
+                              post['id'], 
+                              media_type,
+                              post.get('thumbnail_url')
+                          )
+                          if result:
+                              if isinstance(result, dict):
+                                  post['media_url'] = result['video_url']
+                                  post['thumbnail_url'] = result['thumbnail_url']
+                              else:
+                                  post['media_url'] = result
+                              # Add media_type to help frontend handle different types
+                              post['media_type'] = media_type
+                  
+                  with open(posts_file, 'w') as f:
+                      json.dump(data, f, indent=2)
+                  print("Successfully processed all posts")
               except Exception as e:
-                  logging.error(f"Error reading file {input_file}: {e}")
-                  return False
-              
-              processed_posts = []
-              for post in data.get('data', []):
-                  try:
-                      post_id = post.get('id', 'unknown')
-                      logging.info(f"Processing post {post_id}")
-                      
-                      if post['media_type'] == 'CAROUSEL_ALBUM' and 'children' in post:
-                          children_media = []
-                          for i, child in enumerate(post['children'].get('data', [])):
-                              child_url = download_media(
-                                  child['media_url'],
-                                  f"{post_id}_{i}",
-                                  child['media_type']
-                              )
-                              if child_url:
-                                  children_media.append({
-                                      'media_type': child['media_type'],
-                                      'media_url': child_url
-                                  })
-                          post['children_media'] = children_media
-                      
-                      elif post['media_type'] in ['VIDEO', 'REEL']:
-                          video_url = download_media(post['media_url'], post_id, post['media_type'])
-                          if 'thumbnail_url' in post:
-                              thumbnail_url = download_media(
-                                  post['thumbnail_url'],
-                                  f"{post_id}_thumb",
-                                  post['media_type'],
-                                  True
-                              )
-                              if thumbnail_url:
-                                  post['thumbnail_url'] = thumbnail_url
-                          if video_url:
-                              post['media_url'] = video_url
-                      
-                      else:  # Single image
-                          local_url = download_media(post['media_url'], post_id, post['media_type'])
-                          if local_url:
-                              post['media_url'] = local_url
-                      
-                      processed_posts.append(post)
-                      logging.info(f"Successfully processed post {post_id}")
-                      
-                  except Exception as e:
-                      logging.error(f"Error processing post {post.get('id', 'unknown')}: {e}")
-                      continue
-              
-              try:
-                  with open(output_file, 'w') as f:
-                      json.dump({'data': processed_posts}, f, indent=2)
-                  logging.info(f"Successfully wrote {len(processed_posts)} posts to {output_file}")
-                  return True
-              except Exception as e:
-                  logging.error(f"Error writing to {output_file}: {e}")
-                  return False
+                  print(f"Error processing posts: {e}")
+                  traceback.print_exc()
+                  sys.exit(1)
           
           if __name__ == '__main__':
-              if len(sys.argv) != 3:
-                  logging.error("Usage: python process_media.py input_file output_file")
-                  sys.exit(1)
-              
-              success = process_posts(sys.argv[1], sys.argv[2])
-              sys.exit(0 if success else 1)
+              process_posts('data/temp-posts.json')
           EOF
           
-          echo "Starting post processing..."
+          # Function to merge posts
+          merge_posts() {
+            local temp_file="$1"
+            local new_posts="$2"
+            if ! jq -s '.[0].data + .[1].data | {data: .}' "$temp_file" "$new_posts" 2>/dev/null; then
+              echo "Error merging posts"
+              echo "temp_file contents:"
+              cat "$temp_file"
+              echo "new_posts contents:"
+              cat "$new_posts"
+              return 1
+            fi
+          }
           
-          # Process posts in batches
           while [ -n "$NEXT_URL" ] && [ $POSTS_COUNT -lt $MAX_POSTS ]; do
-            echo "Fetching posts from: $NEXT_URL"
+            echo "Fetching from URL: $NEXT_URL"
             
-            # Fetch current batch with retry
-            MAX_RETRIES=3
-            RETRY_COUNT=0
-            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              if curl -s "$NEXT_URL" > assets/data/current-batch.json; then
-                break
-              fi
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              echo "Retry $RETRY_COUNT of $MAX_RETRIES"
-              sleep 5
-            done
+            # Fetch posts
+            RESPONSE=$(curl -s "$NEXT_URL")
             
-            if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-              echo "Error: Failed to fetch posts after $MAX_RETRIES attempts"
+            # Check for API errors
+            if echo "$RESPONSE" | jq -e '.error' > /dev/null; then
+              echo "Error from Instagram API:"
+              echo "$RESPONSE" | jq '.error'
               exit 1
             fi
             
-            # Validate response
-            if [ ! -s assets/data/current-batch.json ]; then
-              echo "Error: Empty response from Instagram API"
-              exit 1
-            fi
+            echo "$RESPONSE" > data/current-batch.json
             
-            if ! jq empty assets/data/current-batch.json 2>/dev/null; then
-              echo "Error: Invalid JSON response from Instagram API"
-              cat assets/data/current-batch.json
-              exit 1
-            fi
-            
-            # Process media
-            if ! python process_media.py assets/data/current-batch.json assets/data/processed-batch.json; then
-              echo "Error: Failed to process media"
-              exit 1
-            fi
+            # Get next page URL
+            NEXT_URL=$(echo "$RESPONSE" | jq -r '.paging.next // empty')
             
             # Merge with existing posts
-            if ! jq -s '
-              .[0].data + .[1].data | 
-              unique_by(.id) | 
-              {data: .}
-            ' assets/data/instagram-posts.json assets/data/processed-batch.json > assets/data/merged.json; then
-              echo "Error: Failed to merge posts"
+            if ! merge_posts data/temp-posts.json data/current-batch.json > data/merged.json; then
+              echo "Error merging posts"
               exit 1
             fi
+            mv data/merged.json data/temp-posts.json
             
-            mv assets/data/merged.json assets/data/instagram-posts.json
-            
-            NEXT_URL=$(jq -r '.paging.next // empty' assets/data/current-batch.json)
-            POSTS_COUNT=$(jq '.data | length' assets/data/instagram-posts.json)
-            
-            echo "Successfully processed $POSTS_COUNT posts"
+            # Update count
+            POSTS_COUNT=$(jq '.data | length' data/temp-posts.json)
+            echo "Fetched $POSTS_COUNT posts"
           done
           
-          echo "Cleaning up temporary files..."
-          rm -f assets/data/current-batch.json assets/data/processed-batch.json process_media.py
-          echo "Instagram post fetch completed successfully"
+          # Download and process media files
+          echo "Starting media download..."
+          python download_media.py
+          
+          # Move final file to destination
+          mv data/temp-posts.json data/instagram.json
+          
+          # Clean up temporary files
+          rm -f data/current-batch.json download_media.py
+          
+          echo "Process completed successfully"
 
-      - name: Verify processed data
+      - name: List generated files
         run: |
-          echo "Verifying processed data..."
-          if [ ! -f assets/data/instagram-posts.json ]; then
-            echo "Error: Instagram posts file not found"
-            exit 1
-          fi
-          
-          if ! jq empty assets/data/instagram-posts.json 2>/dev/null; then
-            echo "Error: Invalid JSON in processed posts file"
-            exit 1
-          fi
-          
-          POSTS_COUNT=$(jq '.data | length' assets/data/instagram-posts.json)
-          echo "Verified $POSTS_COUNT posts in final output"
+          echo "Contents of data/instagram:"
+          ls -la data/instagram || true
+          echo "Contents of data:"
+          ls -la data || true
+          echo "First few lines of instagram.json:"
+          head -n 20 data/instagram.json || true
 
-      - name: Commit and push if there are changes
+      - name: Configure Git
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          echo "Checking for changes..."
-          if git status --porcelain | grep .; then
-            echo "Changes detected, committing..."
-            git add assets/data/instagram-posts.json assets/data/instagram/{images,videos,thumbnails}
-            git commit -m "Update Instagram posts"
-            git push
-            echo "Changes pushed successfully"
-          else
+
+      - name: Commit and push if there are changes
+        run: |
+          git add data/instagram.json data/instagram/images/ || true
+          git status
+          if git diff --staged --quiet; then
             echo "No changes to commit"
+          else
+            git commit -m "Update Instagram posts [skip ci]"
+            git push
           fi
