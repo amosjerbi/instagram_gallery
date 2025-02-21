@@ -1,0 +1,301 @@
+name: Fetch Instagram Posts
+
+on:
+  push:
+    branches:
+      - gh-pages
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Run at midnight UTC every day
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  fetch-instagram:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/gh-pages'  # Only run on gh-pages branch
+    environment: github-pages
+    env:
+      INSTAGRAM_TOKEN: ${{ secrets.INSTAGRAM_TOKEN }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages  # Explicitly checkout gh-pages branch
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Verify branch
+        run: |
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$CURRENT_BRANCH" != "gh-pages" ]; then
+            echo "Error: Must run on gh-pages branch, current branch is $CURRENT_BRANCH"
+            exit 1
+          fi
+          echo "Verified running on gh-pages branch"
+
+      - name: Verify secrets
+        run: |
+          if [ -z "$INSTAGRAM_TOKEN" ]; then
+            echo "::error::INSTAGRAM_TOKEN is not set. Please add it to your repository secrets."
+            echo "To add the secret:"
+            echo "1. Go to your repository settings"
+            echo "2. Click on 'Secrets and variables' under 'Security'"
+            echo "3. Click on 'Actions'"
+            echo "4. Click 'New repository secret'"
+            echo "5. Add INSTAGRAM_TOKEN with your Instagram token"
+            exit 1
+          fi
+          echo "Instagram token is properly set"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pillow
+
+      - name: Create directories
+        run: |
+          mkdir -p data/instagram/{images,videos,thumbnails}
+          chmod -R 755 data
+
+      - name: Fetch Instagram posts
+        run: |
+          set -e  # Exit on error
+          
+          # Initialize variables
+          NEXT_URL="https://graph.instagram.com/me/media?limit=50&fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}&access_token=$INSTAGRAM_TOKEN"
+          POSTS_COUNT=0
+          MAX_POSTS=120
+          
+          # Create initial posts file
+          echo '{"data":[]}' > data/instagram/posts.json
+          
+          # Create Python script for media processing
+          cat > process_media.py << 'EOF'
+          import json
+          import os
+          import sys
+          import requests
+          from PIL import Image
+          from io import BytesIO
+          import logging
+          
+          logging.basicConfig(level=logging.INFO)
+          
+          def download_media(url, post_id, media_type, is_thumbnail=False):
+              try:
+                  logging.info(f"Downloading {media_type} for {post_id}")
+                  response = requests.get(url, timeout=30)
+                  response.raise_for_status()
+                  
+                  if media_type in ['IMAGE', 'CAROUSEL_ALBUM'] or is_thumbnail:
+                      img = Image.open(BytesIO(response.content))
+                      path = f'data/instagram/{"thumbnails" if is_thumbnail else "images"}/{post_id}.jpg'
+                      img.save(path, 'JPEG', quality=85)
+                      return f'/data/instagram/{"thumbnails" if is_thumbnail else "images"}/{post_id}.jpg'
+                  elif media_type in ['VIDEO', 'REEL']:
+                      path = f'data/instagram/videos/{post_id}.mp4'
+                      with open(path, 'wb') as f:
+                          f.write(response.content)
+                      return f'/data/instagram/videos/{post_id}.mp4'
+              except Exception as e:
+                  logging.error(f"Error downloading media: {e}")
+                  return None
+          
+          def process_posts(input_file, output_file):
+              try:
+                  with open(input_file) as f:
+                      content = f.read()
+                      try:
+                          # Try to parse the JSON content
+                          data = json.loads(content)
+                      except json.JSONDecodeError as e:
+                          logging.error(f"Invalid JSON in {input_file}:")
+                          logging.error(f"Error position: line {e.lineno}, column {e.colno}")
+                          logging.error(f"Error message: {str(e)}")
+                          # Try to salvage the JSON by trimming any extra data
+                          try:
+                              # Find the last valid JSON object
+                              last_brace = content.rindex('}')
+                              content = content[:last_brace + 1]
+                              data = json.loads(content)
+                              logging.info("Successfully salvaged JSON content")
+                          except Exception as e2:
+                              logging.error(f"Failed to salvage JSON: {e2}")
+                              return False
+              except Exception as e:
+                  logging.error(f"Error reading {input_file}: {e}")
+                  return False
+              
+              if not isinstance(data, dict) or 'data' not in data:
+                  logging.error(f"Invalid data structure in {input_file}")
+                  return False
+              
+              processed = []
+              for post in data.get('data', []):
+                  try:
+                      if not isinstance(post, dict):
+                          logging.error(f"Invalid post data: {post}")
+                          continue
+                          
+                      post_id = post.get('id', 'unknown')
+                      logging.info(f"Processing post {post_id}")
+                      
+                      if post.get('media_type') == 'CAROUSEL_ALBUM' and 'children' in post:
+                          children = []
+                          for i, child in enumerate(post['children'].get('data', [])):
+                              if not isinstance(child, dict):
+                                  logging.error(f"Invalid child data for post {post_id}")
+                                  continue
+                              url = download_media(
+                                  child.get('media_url'),
+                                  f"{post_id}_{i}",
+                                  child.get('media_type')
+                              )
+                              if url:
+                                  children.append({
+                                      'media_type': child.get('media_type'),
+                                      'media_url': url
+                                  })
+                          post['children_media'] = children
+                      
+                      elif post.get('media_type') in ['VIDEO', 'REEL']:
+                          video_url = download_media(post.get('media_url'), post_id, post.get('media_type'))
+                          if post.get('thumbnail_url'):
+                              thumb_url = download_media(
+                                  post['thumbnail_url'],
+                                  f"{post_id}_thumb",
+                                  post['media_type'],
+                                  True
+                              )
+                              if thumb_url:
+                                  post['thumbnail_url'] = thumb_url
+                          if video_url:
+                              post['media_url'] = video_url
+                      
+                      else:
+                          url = download_media(post.get('media_url'), post_id, post.get('media_type'))
+                          if url:
+                              post['media_url'] = url
+                      
+                      processed.append(post)
+                      logging.info(f"Successfully processed post {post_id}")
+                  
+                  except Exception as e:
+                      logging.error(f"Error processing post {post.get('id', 'unknown')}: {e}")
+                      continue
+              
+              try:
+                  with open(output_file, 'w') as f:
+                      json.dump({'data': processed}, f, indent=2)
+                  return True
+              except Exception as e:
+                  logging.error(f"Error writing to {output_file}: {e}")
+                  return False
+          
+          if __name__ == '__main__':
+              if len(sys.argv) != 3:
+                  print("Usage: python process_media.py input_file output_file")
+                  sys.exit(1)
+              success = process_posts(sys.argv[1], sys.argv[2])
+              sys.exit(0 if success else 1)
+          EOF
+          
+          # Process posts in batches
+          while [ -n "$NEXT_URL" ] && [ $POSTS_COUNT -lt $MAX_POSTS ]; do
+            echo "Fetching from: $NEXT_URL"
+            
+            # Fetch posts with retry
+            MAX_RETRIES=3
+            for i in $(seq 1 $MAX_RETRIES); do
+              if RESPONSE=$(curl -s "$NEXT_URL"); then
+                # Validate JSON response
+                if echo "$RESPONSE" | jq empty > /dev/null 2>&1; then
+                  # Check for API error
+                  if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+                    echo "Error from Instagram API:"
+                    echo "$RESPONSE" | jq '.error'
+                    exit 1
+                  fi
+                  break
+                fi
+              fi
+              echo "Retry $i of $MAX_RETRIES"
+              sleep 5
+            done
+            
+            # Save response
+            echo "$RESPONSE" > data/instagram/current-batch.json
+            
+            # Validate response
+            if [ ! -s data/instagram/current-batch.json ]; then
+              echo "Error: Empty response from Instagram API"
+              exit 1
+            fi
+            
+            # Process media
+            if ! python process_media.py data/instagram/current-batch.json data/instagram/processed.json; then
+              echo "Error: Failed to process media"
+              echo "Response content:"
+              head -n 50 data/instagram/current-batch.json
+              exit 1
+            fi
+            
+            # Merge with existing posts
+            if ! jq -s '
+              .[0].data + .[1].data | 
+              unique_by(.id) | 
+              {data: .}
+            ' data/instagram/posts.json data/instagram/processed.json > data/instagram/merged.json; then
+              echo "Error: Failed to merge posts"
+              exit 1
+            fi
+            
+            mv data/instagram/merged.json data/instagram/posts.json
+            
+            # Update for next iteration
+            NEXT_URL=$(jq -r '.paging.next // empty' data/instagram/current-batch.json)
+            POSTS_COUNT=$(jq '.data | length' data/instagram/posts.json)
+            
+            echo "Processed $POSTS_COUNT posts"
+          done
+          
+          # Cleanup
+          rm -f data/instagram/current-batch.json data/instagram/processed.json process_media.py
+
+      - name: Verify data
+        run: |
+          if [ ! -f data/instagram/posts.json ]; then
+            echo "Error: Posts file not found"
+            exit 1
+          fi
+          
+          if ! jq empty data/instagram/posts.json 2>/dev/null; then
+            echo "Error: Invalid JSON in posts file"
+            exit 1
+          fi
+          
+          POSTS_COUNT=$(jq '.data | length' data/instagram/posts.json)
+          echo "Verified $POSTS_COUNT posts"
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          if git status --porcelain | grep .; then
+            git add data/instagram/
+            git commit -m "Update Instagram posts"
+            git push
+            echo "Changes pushed successfully"
+          else
+            echo "No changes to commit"
+          fi
