@@ -103,34 +103,63 @@ jobs:
           def process_posts(input_file, output_file):
               try:
                   with open(input_file) as f:
-                      data = json.load(f)
+                      content = f.read()
+                      try:
+                          # Try to parse the JSON content
+                          data = json.loads(content)
+                      except json.JSONDecodeError as e:
+                          logging.error(f"Invalid JSON in {input_file}:")
+                          logging.error(f"Error position: line {e.lineno}, column {e.colno}")
+                          logging.error(f"Error message: {str(e)}")
+                          # Try to salvage the JSON by trimming any extra data
+                          try:
+                              # Find the last valid JSON object
+                              last_brace = content.rindex('}')
+                              content = content[:last_brace + 1]
+                              data = json.loads(content)
+                              logging.info("Successfully salvaged JSON content")
+                          except Exception as e2:
+                              logging.error(f"Failed to salvage JSON: {e2}")
+                              return False
               except Exception as e:
                   logging.error(f"Error reading {input_file}: {e}")
+                  return False
+              
+              if not isinstance(data, dict) or 'data' not in data:
+                  logging.error(f"Invalid data structure in {input_file}")
                   return False
               
               processed = []
               for post in data.get('data', []):
                   try:
+                      if not isinstance(post, dict):
+                          logging.error(f"Invalid post data: {post}")
+                          continue
+                          
                       post_id = post.get('id', 'unknown')
+                      logging.info(f"Processing post {post_id}")
                       
-                      if post['media_type'] == 'CAROUSEL_ALBUM' and 'children' in post:
+                      if post.get('media_type') == 'CAROUSEL_ALBUM' and 'children' in post:
                           children = []
                           for i, child in enumerate(post['children'].get('data', [])):
+                              if not isinstance(child, dict):
+                                  logging.error(f"Invalid child data for post {post_id}")
+                                  continue
                               url = download_media(
-                                  child['media_url'],
+                                  child.get('media_url'),
                                   f"{post_id}_{i}",
-                                  child['media_type']
+                                  child.get('media_type')
                               )
                               if url:
                                   children.append({
-                                      'media_type': child['media_type'],
+                                      'media_type': child.get('media_type'),
                                       'media_url': url
                                   })
                           post['children_media'] = children
                       
-                      elif post['media_type'] in ['VIDEO', 'REEL']:
-                          video_url = download_media(post['media_url'], post_id, post['media_type'])
-                          if 'thumbnail_url' in post:
+                      elif post.get('media_type') in ['VIDEO', 'REEL']:
+                          video_url = download_media(post.get('media_url'), post_id, post.get('media_type'))
+                          if post.get('thumbnail_url'):
                               thumb_url = download_media(
                                   post['thumbnail_url'],
                                   f"{post_id}_thumb",
@@ -143,12 +172,12 @@ jobs:
                               post['media_url'] = video_url
                       
                       else:
-                          url = download_media(post['media_url'], post_id, post['media_type'])
+                          url = download_media(post.get('media_url'), post_id, post.get('media_type'))
                           if url:
                               post['media_url'] = url
                       
                       processed.append(post)
-                      logging.info(f"Processed post {post_id}")
+                      logging.info(f"Successfully processed post {post_id}")
                   
                   except Exception as e:
                       logging.error(f"Error processing post {post.get('id', 'unknown')}: {e}")
@@ -178,7 +207,16 @@ jobs:
             MAX_RETRIES=3
             for i in $(seq 1 $MAX_RETRIES); do
               if RESPONSE=$(curl -s "$NEXT_URL"); then
-                break
+                # Validate JSON response
+                if echo "$RESPONSE" | jq empty > /dev/null 2>&1; then
+                  # Check for API error
+                  if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+                    echo "Error from Instagram API:"
+                    echo "$RESPONSE" | jq '.error'
+                    exit 1
+                  fi
+                  break
+                fi
               fi
               echo "Retry $i of $MAX_RETRIES"
               sleep 5
@@ -193,15 +231,11 @@ jobs:
               exit 1
             fi
             
-            if ! jq empty data/instagram/current-batch.json 2>/dev/null; then
-              echo "Error: Invalid JSON response"
-              cat data/instagram/current-batch.json
-              exit 1
-            fi
-            
             # Process media
             if ! python process_media.py data/instagram/current-batch.json data/instagram/processed.json; then
               echo "Error: Failed to process media"
+              echo "Response content:"
+              head -n 50 data/instagram/current-batch.json
               exit 1
             fi
             
