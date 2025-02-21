@@ -33,16 +33,16 @@ jobs:
           # Create directories if they don't exist
           mkdir -p assets/data/instagram/{images,videos,thumbnails}
           
-          # Create a temporary file for storing all posts
-          echo '{"data":[]}' > assets/data/temp-posts.json
+          # Initialize posts file with empty array
+          echo '{"data":[]}' > assets/data/instagram-posts.json
           
           # Initialize variables
           NEXT_URL="https://graph.instagram.com/me/media?limit=50&fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}&access_token=$INSTAGRAM_ACCESS_TOKEN"
           POSTS_COUNT=0
           MAX_POSTS=120
           
-          # Create Python script to download and process media
-          cat > download_media.py << 'EOF'
+          # Create Python script for downloading and processing media
+          cat > process_media.py << 'EOF'
           import json
           import os
           import requests
@@ -79,72 +79,102 @@ jobs:
                   data = json.load(f)
               
               processed_posts = []
-              for post in data['data']:
-                  if post['media_type'] == 'CAROUSEL_ALBUM' and 'children' in post:
-                      # Process each item in the carousel
-                      children_media = []
-                      for child in post['children']['data']:
-                          child_url = download_media(child['media_url'], f"{post['id']}_{len(children_media)}", child['media_type'])
-                          if child_url:
-                              children_media.append({
-                                  'media_type': child['media_type'],
-                                  'media_url': child_url
-                              })
-                      post['children_media'] = children_media
-                  elif post['media_type'] in ['VIDEO', 'REEL']:
-                      # Download video and thumbnail
-                      video_url = download_media(post['media_url'], post['id'], post['media_type'])
-                      thumbnail_url = download_media(post['thumbnail_url'], f"{post['id']}_thumb", post['media_type'], True)
-                      if video_url:
-                          post['media_url'] = video_url
-                      if thumbnail_url:
-                          post['thumbnail_url'] = thumbnail_url
-                  else:
-                      # Handle single image
-                      local_url = download_media(post['media_url'], post['id'], post['media_type'])
-                      if local_url:
-                          post['media_url'] = local_url
-                  
-                  processed_posts.append(post)
+              for post in data.get('data', []):
+                  try:
+                      if post['media_type'] == 'CAROUSEL_ALBUM' and 'children' in post:
+                          # Process each item in the carousel
+                          children_media = []
+                          for i, child in enumerate(post['children'].get('data', [])):
+                              child_url = download_media(
+                                  child['media_url'],
+                                  f"{post['id']}_{i}",
+                                  child['media_type']
+                              )
+                              if child_url:
+                                  children_media.append({
+                                      'media_type': child['media_type'],
+                                      'media_url': child_url
+                                  })
+                          post['children_media'] = children_media
+                      elif post['media_type'] in ['VIDEO', 'REEL']:
+                          # Download video and thumbnail
+                          video_url = download_media(post['media_url'], post['id'], post['media_type'])
+                          if 'thumbnail_url' in post:
+                              thumbnail_url = download_media(
+                                  post['thumbnail_url'],
+                                  f"{post['id']}_thumb",
+                                  post['media_type'],
+                                  True
+                              )
+                              if thumbnail_url:
+                                  post['thumbnail_url'] = thumbnail_url
+                          if video_url:
+                              post['media_url'] = video_url
+                      else:
+                          # Handle single image
+                          local_url = download_media(post['media_url'], post['id'], post['media_type'])
+                          if local_url:
+                              post['media_url'] = local_url
+                      
+                      processed_posts.append(post)
+                  except Exception as e:
+                      print(f"Error processing post {post.get('id', 'unknown')}: {e}")
+                      continue
               
-              data['data'] = processed_posts
-              with open(posts_file, 'w') as f:
-                  json.dump(data, f, indent=2)
+              return {'data': processed_posts}
           
           if __name__ == '__main__':
-              process_posts('assets/data/temp-posts.json')
+              import sys
+              input_file = sys.argv[1]
+              output_file = sys.argv[2]
+              
+              processed_data = process_posts(input_file)
+              
+              with open(output_file, 'w') as f:
+                  json.dump(processed_data, f, indent=2)
           EOF
           
-          # Function to merge posts
-          merge_posts() {
-            local temp_file="$1"
-            local new_posts="$2"
-            jq -s '.[0].data + .[1].data | {data: .}' "$temp_file" "$new_posts"
-          }
-          
+          # Fetch and process posts
           while [ -n "$NEXT_URL" ] && [ $POSTS_COUNT -lt $MAX_POSTS ]; do
-            # Fetch posts
+            echo "Fetching posts from: $NEXT_URL"
+            
+            # Fetch current batch
             curl -s "$NEXT_URL" > assets/data/current-batch.json
             
-            # Get next page URL
-            NEXT_URL=$(jq -r '.paging.next // empty' assets/data/current-batch.json)
+            # Check if the request was successful
+            if [ ! -s assets/data/current-batch.json ]; then
+              echo "Error: Empty response from Instagram API"
+              exit 1
+            fi
+            
+            # Validate JSON structure
+            if ! jq empty assets/data/current-batch.json 2>/dev/null; then
+              echo "Error: Invalid JSON response from Instagram API"
+              exit 1
+            fi
+            
+            # Process the current batch
+            python process_media.py assets/data/current-batch.json assets/data/processed-batch.json
             
             # Merge with existing posts
-            merge_posts assets/data/temp-posts.json assets/data/current-batch.json > assets/data/merged.json
-            mv assets/data/merged.json assets/data/temp-posts.json
+            jq -s '
+              .[0].data + .[1].data | 
+              unique_by(.id) | 
+              {data: .}
+            ' assets/data/instagram-posts.json assets/data/processed-batch.json > assets/data/merged.json
             
-            # Update count
-            POSTS_COUNT=$(jq '.data | length' assets/data/temp-posts.json)
+            # Update posts file
+            mv assets/data/merged.json assets/data/instagram-posts.json
+            
+            # Get next page URL and update count
+            NEXT_URL=$(jq -r '.paging.next // empty' assets/data/current-batch.json)
+            POSTS_COUNT=$(jq '.data | length' assets/data/instagram-posts.json)
+            
+            echo "Processed $POSTS_COUNT posts so far"
           done
           
-          # Download and process media files
-          python download_media.py
-          
-          # Move final file to destination
-          mv assets/data/temp-posts.json assets/data/instagram-posts.json
-          
           # Clean up temporary files
-          rm -f assets/data/current-batch.json download_media.py
+          rm -f assets/data/current-batch.json assets/data/processed-batch.json process_media.py
 
       - name: Commit and push if there are changes
         run: |
