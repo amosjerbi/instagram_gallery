@@ -28,14 +28,35 @@ def fetch_instagram_media(access_token, limit=POSTS_PER_PAGE):
     }
 
     try:
+        logging.info(f"Fetching from: {base_url}?limit={limit}&fields={API_FIELDS}&access_token=***")
         response = requests.get(base_url, params=params)
         response.raise_for_status()
-        return response.json()
+        
+        # Try to parse the JSON response
+        try:
+            data = response.json()
+            # Validate the response structure
+            if not isinstance(data, dict):
+                raise ValueError("Response is not a valid JSON object")
+            if "data" not in data:
+                raise ValueError("Response missing 'data' field")
+            if not isinstance(data["data"], list):
+                raise ValueError("'data' field is not a list")
+            
+            return data
+            
+        except json.JSONDecodeError as e:
+            logging.error(f"Failed to parse JSON response: {str(e)}")
+            logging.error(f"Response content: {response.text[:1000]}...")  # Show first 1000 chars
+            raise
+            
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to fetch from Instagram API: {e}")
         if response:
-            logging.error(f"Response content: {response.text}")
-        sys.exit(1)
+            logging.error(f"Response status code: {response.status_code}")
+            logging.error(f"Response headers: {dict(response.headers)}")
+            logging.error(f"Response content: {response.text[:1000]}...")  # Show first 1000 chars
+        raise
 
 def save_json(data, filename):
     """
@@ -43,12 +64,23 @@ def save_json(data, filename):
     """
     try:
         os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
+        # Validate data before saving
+        if not isinstance(data, dict):
+            raise ValueError(f"Data must be a dictionary, got {type(data)}")
+        
+        # Convert to string first to validate JSON
+        json_str = json.dumps(data, ensure_ascii=False, indent=2)
+        
+        # Write to file
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write(json_str)
+            
         logging.info(f"Successfully saved data to {filename}")
+        
     except Exception as e:
         logging.error(f"Failed to save JSON file: {e}")
-        sys.exit(1)
+        raise
 
 def main():
     # Get access token from environment variable
