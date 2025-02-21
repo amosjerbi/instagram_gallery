@@ -151,15 +151,13 @@ function showPost(index) {
     const post = posts[index];
     const modal = document.getElementById('modal');
     const modalImage = document.getElementById('modalImage');
-    const modalCaption = document.querySelector('.modal-caption');
-    const modalDate = document.querySelector('.modal-date');
-    const modalLink = document.querySelector('.modal-link');
+    const modalLink = document.getElementById('modalLink');
     const prevBtn = document.querySelector('.prev-btn');
     const nextBtn = document.querySelector('.next-btn');
 
     // Update navigation buttons
-    prevBtn.disabled = index === 0;
-    nextBtn.disabled = index === posts.length - 1;
+    prevBtn.style.display = index === 0 ? 'none' : 'flex';
+    nextBtn.style.display = index === posts.length - 1 ? 'none' : 'flex';
 
     // Try to get image URL from cache first
     let imageUrl = MediaCache.get(post.id);
@@ -174,13 +172,10 @@ function showPost(index) {
     // Update modal content
     modalImage.src = imageUrl;
     modalImage.alt = post.caption || 'Instagram post';
-    modalCaption.textContent = post.caption || '';
-    modalDate.textContent = new Date(post.timestamp).toLocaleDateString();
     modalLink.href = post.permalink;
 
-    // Show modal with animation
-    modal.style.display = 'block';
-    setTimeout(() => modal.classList.add('show'), 10);
+    // Show modal with proper display style
+    modal.style.display = 'flex';
 
     // Update modal image error handling
     modalImage.onerror = () => {
@@ -193,8 +188,7 @@ function showPost(index) {
 
 function hideModal() {
     const modal = document.getElementById('modal');
-    modal.classList.remove('show');
-    setTimeout(() => modal.style.display = 'none', 300);
+    modal.style.display = 'none';
 }
 
 function prevPost() {
@@ -214,29 +208,37 @@ function initModalControls() {
     const closeBtn = document.querySelector('.close');
     const prevBtn = document.querySelector('.prev-btn');
     const nextBtn = document.querySelector('.next-btn');
+    const modalContent = document.querySelector('.modallic-content');
 
-    // Close button
-    closeBtn.onclick = hideModal;
-
-    // Click outside to close
-    modal.onclick = (event) => {
-        if (event.target === modal) {
+    // Close modal when clicking outside the content
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
             hideModal();
         }
-    };
+    });
+
+    // Close button
+    closeBtn.addEventListener('click', hideModal);
 
     // Navigation buttons
-    prevBtn.onclick = prevPost;
-    nextBtn.onclick = nextPost;
+    prevBtn.addEventListener('click', prevPost);
+    nextBtn.addEventListener('click', nextPost);
 
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
-        if (modal.style.display === 'block') {
-            if (e.key === 'ArrowLeft') prevPost();
-            if (e.key === 'ArrowRight') nextPost();
-            if (e.key === 'Escape') hideModal();
+        if (modal.style.display === 'flex') {
+            if (e.key === 'Escape') {
+                hideModal();
+            } else if (e.key === 'ArrowLeft') {
+                prevPost();
+            } else if (e.key === 'ArrowRight') {
+                nextPost();
+            }
         }
     });
+
+    // Initialize touch gestures
+    initTouchGestures();
 }
 
 async function loadInstagramPosts() {
