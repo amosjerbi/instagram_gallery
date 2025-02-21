@@ -272,21 +272,78 @@ body {
 
 .gallery-item {
     position: relative;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    border-radius: var(--border-radius);
-    background-color: var(--light-gray);
+    break-inside: avoid;
+    margin-bottom: 16px;
 }
 
 .gallery-item img {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.3s;
 }
 
-.gallery-item:hover {
-    transform: translateY(-2px);
+.gallery-item img:hover {
+    opacity: 0.8;
+}
+
+.gallery-item.video::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 1;
+}
+
+.gallery-item.video:hover::before {
+    opacity: 1;
+}
+
+.gallery-item.video::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    z-index: 2;
+    opacity: 0.9;
+    transition: transform 0.3s, opacity 0.3s;
+}
+
+.gallery-item.video .play-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    color: #5dbda6;
+    opacity: 0.9;
+    transition: transform 0.3s, opacity 0.3s;
+}
+
+.gallery-item.video .play-icon ion-icon {
+    font-size: 32px;
+}
+
+.gallery-item.video:hover .play-icon,
+.gallery-item.video:hover::after {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 1;
 }
 
 .load-more-container {

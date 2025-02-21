@@ -95,47 +95,7 @@ function showMorePosts() {
         
         postsToShow.forEach((post, index) => {
             console.log(`Creating element for post ${index + startIndex}:`, post.id);
-            const div = document.createElement('div');
-            div.className = 'gallery-item';
-
-            const img = document.createElement('img');
-            img.className = 'img';
-            
-            // Try to get image URL from cache first
-            let imageUrl = MediaCache.get(post.id);
-            if (!imageUrl) {
-                imageUrl = post.permalink + 'media/?size=l';
-                // Cache the URL if loading is successful
-                img.addEventListener('load', () => {
-                    MediaCache.set(post.id, imageUrl);
-                });
-            }
-            
-            console.log(`Post ${post.id} URL:`, imageUrl);
-            img.src = imageUrl;
-            img.alt = post.caption || 'Instagram post';
-            img.loading = 'lazy';
-            
-            img.onerror = () => {
-                console.error(`Image load error for post ${post.id}:`, imageUrl);
-                console.error('Post data:', JSON.stringify(post, null, 2));
-                // Remove failed URL from cache
-                MediaCache.remove(post.id);
-                img.src = 'https://placehold.co/600x600?text=Image+Unavailable';
-                div.classList.add('error');
-            };
-
-            img.onload = () => {
-                console.log(`Image loaded successfully for post ${post.id}`);
-                div.classList.remove('error');
-            };
-            
-            div.addEventListener('click', () => {
-                console.log(`Clicked post ${post.id} at index ${startIndex + index}`);
-                showPost(startIndex + index);
-            });
-
-            div.appendChild(img);
+            const div = createGalleryItem(post);
             document.getElementById('gallery').appendChild(div);
         });
         
@@ -146,60 +106,97 @@ function showMorePosts() {
     });
 }
 
-function showPost(index) {
-    currentPostIndex = index;
-    const post = posts[index];
+function createGalleryItem(post) {
+    const div = document.createElement('div');
+    div.className = 'gallery-item';
+    
+    // Add video class and play icon if media type is VIDEO or REEL
+    if (post.media_type === 'VIDEO' || post.media_type === 'REEL') {
+        div.className += ' video';
+        const playIcon = document.createElement('div');
+        playIcon.className = 'play-icon';
+        playIcon.innerHTML = '<ion-icon name="play"></ion-icon>';
+        div.appendChild(playIcon);
+    }
+
+    const img = document.createElement('img');
+    img.src = post.media_type === 'VIDEO' ? post.thumbnail_url : post.media_url;
+    img.alt = post.caption || 'Instagram post';
+    img.loading = 'lazy';
+    
+    div.appendChild(img);
+    
+    div.addEventListener('click', () => showPost(post));
+    return div;
+}
+
+function showPost(post) {
     const modal = document.getElementById('modal');
     const modalImage = document.getElementById('modalImage');
     const modalLink = document.getElementById('modalLink');
-    const prevBtn = document.querySelector('.prev-btn');
-    const nextBtn = document.querySelector('.next-btn');
-
-    // Update navigation buttons
-    prevBtn.style.display = index === 0 ? 'none' : 'flex';
-    nextBtn.style.display = index === posts.length - 1 ? 'none' : 'flex';
-
-    // Try to get image URL from cache first
-    let imageUrl = MediaCache.get(post.id);
-    if (!imageUrl) {
-        imageUrl = post.permalink + 'media/?size=l';
-        // Cache the URL if loading is successful
-        modalImage.addEventListener('load', () => {
-            MediaCache.set(post.id, imageUrl);
-        }, { once: true });
+    
+    if (post.media_type === 'VIDEO' || post.media_type === 'REEL') {
+        // Create video element for videos/reels
+        const video = document.createElement('video');
+        video.src = post.media_url;
+        video.controls = true;
+        video.autoplay = true;
+        video.style.maxWidth = '100%';
+        video.style.maxHeight = '82vh';
+        video.style.borderRadius = '16px';
+        
+        // Replace image with video
+        modalImage.style.display = 'none';
+        video.id = 'modalVideo';
+        
+        // Remove existing video if any
+        const existingVideo = document.getElementById('modalVideo');
+        if (existingVideo) {
+            existingVideo.remove();
+        }
+        
+        modalImage.parentNode.insertBefore(video, modalImage);
+    } else {
+        // Handle image posts
+        modalImage.style.display = 'block';
+        modalImage.src = post.media_url;
+        
+        // Remove video if exists
+        const existingVideo = document.getElementById('modalVideo');
+        if (existingVideo) {
+            existingVideo.remove();
+        }
     }
-
-    // Update modal content
-    modalImage.src = imageUrl;
-    modalImage.alt = post.caption || 'Instagram post';
+    
     modalLink.href = post.permalink;
-
-    // Show modal with proper display style
     modal.style.display = 'flex';
-
-    // Update modal image error handling
-    modalImage.onerror = () => {
-        console.error('Modal image failed to load:', post.permalink);
-        // Remove failed URL from cache
-        MediaCache.remove(post.id);
-        modalImage.src = 'https://placehold.co/600x600?text=Image+Unavailable';
-    };
+    
+    currentPostIndex = posts.findIndex(p => p.id === post.id);
+    updateNavigationButtons();
 }
 
 function hideModal() {
     const modal = document.getElementById('modal');
+    const video = document.getElementById('modalVideo');
+    
+    // Stop video playback if exists
+    if (video) {
+        video.pause();
+        video.currentTime = 0;
+    }
+    
     modal.style.display = 'none';
 }
 
 function prevPost() {
     if (currentPostIndex > 0) {
-        showPost(currentPostIndex - 1);
+        showPost(posts[currentPostIndex - 1]);
     }
 }
 
 function nextPost() {
     if (currentPostIndex < posts.length - 1) {
-        showPost(currentPostIndex + 1);
+        showPost(posts[currentPostIndex + 1]);
     }
 }
 
