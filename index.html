@@ -99,22 +99,22 @@
     
 <!-- Modal -->
 <div id="modal" class="modallic">
-    <div class="modallic-content"> 
+    <div class="modallic-content">
         <div class="modallic-image-container">
             <img id="modalImage" src="" alt="">
         </div>
-        <div class="modallic-controls">
-            <button class="nav-btn prev-btn" onclick="showPrevPost()">
-                <ion-icon name="chevron-back-outline"></ion-icon>
-            </button>
-            <button class="nav-btn next-btn" onclick="showNextPost()">
-                <ion-icon name="chevron-forward-outline"></ion-icon>
-            </button>
-        </div>
     </div>
-    <div class="close" onclick="hideModal()">
+    <div class="modallic-controls">
+        <button class="nav-btn prev-btn" onclick="showPrevPost()">
+            <ion-icon name="chevron-back-outline"></ion-icon>
+        </button>
+        <button class="nav-btn next-btn" onclick="showNextPost()">
+            <ion-icon name="chevron-forward-outline"></ion-icon>
+        </button>
+    </div>
+    <button class="close" onclick="hideModal()">
         <ion-icon name="close-outline"></ion-icon>
-    </div>
+    </button>
 </div>
 
 </body>
