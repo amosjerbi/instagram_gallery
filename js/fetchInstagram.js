@@ -121,11 +121,9 @@ function createGalleryItem(post) {
 
     const img = document.createElement('img');
     img.src = post.media_type === 'VIDEO' ? post.thumbnail_url : post.media_url;
-    img.alt = post.caption || 'Instagram post';
     img.loading = 'lazy';
     
     div.appendChild(img);
-    
     div.addEventListener('click', () => showPost(post));
     return div;
 }
@@ -133,7 +131,6 @@ function createGalleryItem(post) {
 function showPost(post) {
     const modal = document.getElementById('modal');
     const modalImage = document.getElementById('modalImage');
-    const modalLink = document.getElementById('modalLink');
     
     if (post.media_type === 'VIDEO' || post.media_type === 'REEL') {
         // Create video element for videos/reels
@@ -142,7 +139,7 @@ function showPost(post) {
         video.controls = true;
         video.autoplay = true;
         video.style.maxWidth = '100%';
-        video.style.maxHeight = '82vh';
+        video.style.maxHeight = '85vh';
         video.style.borderRadius = '16px';
         
         // Replace image with video
@@ -168,9 +165,7 @@ function showPost(post) {
         }
     }
     
-    modalLink.href = post.permalink;
     modal.style.display = 'flex';
-    
     currentPostIndex = posts.findIndex(p => p.id === post.id);
     updateNavigationButtons();
 }
