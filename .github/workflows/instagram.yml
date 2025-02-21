@@ -31,14 +31,13 @@ jobs:
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
         run: |
           # Create directories if they don't exist
-          mkdir -p assets/data/instagram
-          mkdir -p assets/data/instagram/images
+          mkdir -p assets/data/instagram/{images,videos,thumbnails}
           
           # Create a temporary file for storing all posts
           echo '{"data":[]}' > assets/data/temp-posts.json
           
           # Initialize variables
-          NEXT_URL="https://graph.instagram.com/me/media?limit=50&fields=id,caption,media_type,media_url,permalink,timestamp&access_token=$INSTAGRAM_ACCESS_TOKEN"
+          NEXT_URL="https://graph.instagram.com/me/media?limit=50&fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_type,media_url,thumbnail_url}&access_token=$INSTAGRAM_ACCESS_TOKEN"
           POSTS_COUNT=0
           MAX_POSTS=120
           
@@ -50,17 +49,27 @@ jobs:
           from PIL import Image
           from io import BytesIO
           
-          def download_media(url, post_id):
+          def download_media(url, post_id, media_type, is_thumbnail=False):
               try:
                   response = requests.get(url)
                   response.raise_for_status()
                   
-                  # Save original image
-                  img = Image.open(BytesIO(response.content))
-                  img_path = f'assets/data/instagram/images/{post_id}.jpg'
-                  img.save(img_path, 'JPEG', quality=85)
+                  if media_type in ['IMAGE', 'CAROUSEL_ALBUM'] or is_thumbnail:
+                      # Save image or thumbnail
+                      img = Image.open(BytesIO(response.content))
+                      if is_thumbnail:
+                          img_path = f'assets/data/instagram/thumbnails/{post_id}.jpg'
+                      else:
+                          img_path = f'assets/data/instagram/images/{post_id}.jpg'
+                      img.save(img_path, 'JPEG', quality=85)
+                  elif media_type in ['VIDEO', 'REEL']:
+                      # Save video file
+                      video_path = f'assets/data/instagram/videos/{post_id}.mp4'
+                      with open(video_path, 'wb') as f:
+                          f.write(response.content)
+                      return f'/assets/data/instagram/videos/{post_id}.mp4'
                   
-                  return f'/assets/data/instagram/images/{post_id}.jpg'
+                  return f'/assets/data/instagram/{"thumbnails" if is_thumbnail else "images"}/{post_id}.jpg'
               except Exception as e:
                   print(f"Error downloading media for post {post_id}: {e}")
                   return None
@@ -69,12 +78,36 @@ jobs:
               with open(posts_file, 'r') as f:
                   data = json.load(f)
               
+              processed_posts = []
               for post in data['data']:
-                  if post['media_type'] in ['IMAGE', 'CAROUSEL_ALBUM']:
-                      local_url = download_media(post['media_url'], post['id'])
+                  if post['media_type'] == 'CAROUSEL_ALBUM' and 'children' in post:
+                      # Process each item in the carousel
+                      children_media = []
+                      for child in post['children']['data']:
+                          child_url = download_media(child['media_url'], f"{post['id']}_{len(children_media)}", child['media_type'])
+                          if child_url:
+                              children_media.append({
+                                  'media_type': child['media_type'],
+                                  'media_url': child_url
+                              })
+                      post['children_media'] = children_media
+                  elif post['media_type'] in ['VIDEO', 'REEL']:
+                      # Download video and thumbnail
+                      video_url = download_media(post['media_url'], post['id'], post['media_type'])
+                      thumbnail_url = download_media(post['thumbnail_url'], f"{post['id']}_thumb", post['media_type'], True)
+                      if video_url:
+                          post['media_url'] = video_url
+                      if thumbnail_url:
+                          post['thumbnail_url'] = thumbnail_url
+                  else:
+                      # Handle single image
+                      local_url = download_media(post['media_url'], post['id'], post['media_type'])
                       if local_url:
                           post['media_url'] = local_url
+                  
+                  processed_posts.append(post)
               
+              data['data'] = processed_posts
               with open(posts_file, 'w') as f:
                   json.dump(data, f, indent=2)
           
@@ -117,6 +150,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add assets/data/instagram-posts.json assets/data/instagram/images/
+          git add assets/data/instagram-posts.json assets/data/instagram/{images,videos,thumbnails}
           git commit -m "Update Instagram posts" || exit 0
           git push

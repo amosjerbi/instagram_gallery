@@ -110,64 +110,129 @@ function createGalleryItem(post) {
     const div = document.createElement('div');
     div.className = 'gallery-item';
     
-    // Add video class and play icon if media type is VIDEO or REEL
+    // Add video class and play icon for videos and reels
     if (post.media_type === 'VIDEO' || post.media_type === 'REEL') {
-        div.className += ' video';
+        div.classList.add('video');
         const playIcon = document.createElement('div');
         playIcon.className = 'play-icon';
-        playIcon.innerHTML = '<ion-icon name="play"></ion-icon>';
+        playIcon.innerHTML = '<ion-icon name="play-circle-outline"></ion-icon>';
         div.appendChild(playIcon);
     }
-
+    
     const img = document.createElement('img');
-    img.src = post.media_type === 'VIDEO' ? post.thumbnail_url : post.media_url;
     img.loading = 'lazy';
     
+    // Use thumbnail for videos/reels, media_url for images
+    if (post.media_type === 'VIDEO' || post.media_type === 'REEL') {
+        img.src = post.thumbnail_url || post.media_url;
+    } else {
+        img.src = post.media_url;
+    }
+    
     div.appendChild(img);
-    div.addEventListener('click', () => showPost(post));
+    
+    // Add click event to show the post
+    div.addEventListener('click', () => {
+        showPost(post);
+    });
+    
     return div;
 }
 
 function showPost(post) {
     const modal = document.getElementById('modal');
     const modalImage = document.getElementById('modalImage');
+    const modalContent = document.querySelector('.modallic-content');
+    
+    // Clear previous content
+    while (modalContent.firstChild) {
+        modalContent.removeChild(modalContent.firstChild);
+    }
     
     if (post.media_type === 'VIDEO' || post.media_type === 'REEL') {
-        // Create video element for videos/reels
+        // Create and show video element
         const video = document.createElement('video');
         video.src = post.media_url;
         video.controls = true;
         video.autoplay = true;
-        video.style.maxWidth = '100%';
-        video.style.maxHeight = '85vh';
-        video.style.borderRadius = '16px';
+        video.className = 'modal-media';
+        modalContent.appendChild(video);
+    } else if (post.media_type === 'CAROUSEL_ALBUM' && post.children_media) {
+        // Create carousel container
+        const carousel = document.createElement('div');
+        carousel.className = 'carousel';
         
-        // Replace image with video
-        modalImage.style.display = 'none';
-        video.id = 'modalVideo';
+        // Add each media item
+        post.children_media.forEach((child, index) => {
+            const mediaElement = child.media_type === 'VIDEO' ? 
+                createVideoElement(child.media_url) : 
+                createImageElement(child.media_url);
+            
+            mediaElement.className = 'carousel-item';
+            mediaElement.style.display = index === 0 ? 'block' : 'none';
+            carousel.appendChild(mediaElement);
+        });
         
-        // Remove existing video if any
-        const existingVideo = document.getElementById('modalVideo');
-        if (existingVideo) {
-            existingVideo.remove();
+        modalContent.appendChild(carousel);
+        
+        // Add carousel navigation if needed
+        if (post.children_media.length > 1) {
+            addCarouselControls(carousel);
         }
-        
-        modalImage.parentNode.insertBefore(video, modalImage);
     } else {
-        // Handle image posts
-        modalImage.style.display = 'block';
-        modalImage.src = post.media_url;
-        
-        // Remove video if exists
-        const existingVideo = document.getElementById('modalVideo');
-        if (existingVideo) {
-            existingVideo.remove();
-        }
+        // Show single image
+        const img = document.createElement('img');
+        img.src = post.media_url;
+        img.className = 'modal-media';
+        modalContent.appendChild(img);
     }
     
     modal.style.display = 'flex';
     currentPostIndex = posts.findIndex(p => p.id === post.id);
     updateNavigationButtons();
+}
+
+function createVideoElement(url) {
+    const video = document.createElement('video');
+    video.src = url;
+    video.controls = true;
+    video.className = 'modal-media';
+    return video;
+}
+
+function createImageElement(url) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.className = 'modal-media';
+    return img;
+}
+
+function addCarouselControls(carousel) {
+    let currentSlide = 0;
+    const items = carousel.querySelectorAll('.carousel-item');
+    
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'carousel-nav prev';
+    prevBtn.innerHTML = '<ion-icon name="chevron-back-outline"></ion-icon>';
+    
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'carousel-nav next';
+    nextBtn.innerHTML = '<ion-icon name="chevron-forward-outline"></ion-icon>';
+    
+    prevBtn.addEventListener('click', () => {
+        items[currentSlide].style.display = 'none';
+        currentSlide = (currentSlide - 1 + items.length) % items.length;
+        items[currentSlide].style.display = 'block';
+    });
+    
+    nextBtn.addEventListener('click', () => {
+        items[currentSlide].style.display = 'none';
+        currentSlide = (currentSlide + 1) % items.length;
+        items[currentSlide].style.display = 'block';
+    });
+    
+    carousel.appendChild(prevBtn);
+    carousel.appendChild(nextBtn);
 }
 
 function hideModal() {
